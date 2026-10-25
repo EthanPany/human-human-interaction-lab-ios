@@ -30,9 +30,17 @@ final class ScreenshotTests: XCTestCase {
         if name.exists { name.tap(); name.typeText("Alexandria Montgomery") }
         snap("02-sign-in-filled")
 
+        // Submit from the password field: on iPad the keyboard covers Continue
+        let password = app.secureTextFields["Password"]
+        if password.exists {
+            password.tap()
+            password.typeText("\n")
+        }
         let continueButton = app.buttons["Continue"]
-        if !continueButton.isHittable { app.swipeUp() }
-        continueButton.tap()
+        if app.textFields["Phone number"].exists && continueButton.exists {
+            if !continueButton.isHittable { app.swipeUp() }
+            continueButton.tap()
+        }
 
         // Step 2: the avatar
         XCTAssertTrue(app.staticTexts["Make your avatar"].waitForExistence(timeout: 15))
@@ -99,6 +107,16 @@ final class ScreenshotTests: XCTestCase {
         app.tabBars.buttons["Profile"].tap()
         sleep(2)
         snap("30-profile")
+        // Landscape is wide enough for the two column Profile and the People grid
+        XCUIDevice.shared.orientation = .landscapeLeft
+        sleep(3)
+        snap("30b-profile-landscape")
+        app.tabBars.buttons["People"].tap()
+        sleep(2)
+        snap("20b-people-landscape")
+        app.tabBars.buttons["Profile"].tap()
+        XCUIDevice.shared.orientation = .portrait
+        sleep(3)
         app.swipeUp()
         sleep(1)
         snap("31-profile-scrolled")
