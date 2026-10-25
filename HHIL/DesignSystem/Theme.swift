@@ -45,6 +45,14 @@ struct Theme {
     var maxContentWidth: CGFloat = 1400
     /// Narrowest a card in a grid of people gets.
     var gridCardMinWidth: CGFloat = 300
+    /// People sidebar beside a person's page (iPad, the unfolded Duo, landscape).
+    var sidebarMinWidth: CGFloat = 280
+    var sidebarIdealWidth: CGFloat = 330
+    var sidebarMaxWidth: CGFloat = 400
+    /// A person's page: one column of cards stays this narrow, two columns this wide at most.
+    var readableCardWidth: CGFloat = 640
+    var detailTwoColumnWidth: CGFloat = 760
+    var detailMaxWidth: CGFloat = 1080
 
     // Type (General Sans, falls back to the system font if not bundled)
     var largeTitle = Font.brand(34, .semibold)

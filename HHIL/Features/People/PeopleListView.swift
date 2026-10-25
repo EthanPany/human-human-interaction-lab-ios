@@ -2,63 +2,52 @@ import SwiftUI
 
 /// People you met in person or saved, newest first. Updates live: someone
 /// shows up the moment you meet, before anything else is known about them.
+///
+/// A sidebar and a detail column. On a phone (and a folded iPhone Duo, whose
+/// width is compact) the split collapses into a stack and tapping a person
+/// pushes their page. On iPad, landscape and the unfolded Duo the list stays
+/// on the left and the selected person's page sits beside it.
 struct PeopleListView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.theme) private var theme
     @State private var people: [PersonSummary] = []
     @State private var search = ""
-    @State private var width: CGFloat = 0
+    @State private var columns: NavigationSplitViewVisibility = .all
 
     var body: some View {
         @Bindable var router = env.router
-        NavigationStack(path: $router.peoplePath) {
-            Group {
-                if width >= theme.twoColumnWidth { grid } else { list }
+        NavigationSplitView(columnVisibility: $columns) {
+            sidebar(selection: $router.selectedPersonId)
+        } detail: {
+            if let id = router.selectedPersonId {
+                PersonDetailView(personId: id)
+            } else {
+                NoPersonSelected(hasPeople: !people.isEmpty)
             }
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-            .overlay {
-                if people.isEmpty {
-                    ContentUnavailableView(
-                        "No one yet",
-                        systemImage: "person.2",
-                        description: Text("People you meet show up here, with a summary after you talk.")
-                    )
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .background(theme.background)
-            .searchable(text: $search, prompt: "Search people")
-            .navigationTitle("People")
-            .navigationDestination(for: String.self) { PersonDetailView(personId: $0) }
         }
+        .navigationSplitViewStyle(.balanced)
         .task(id: env.session.userId) { await load() }
     }
 
-    private var list: some View {
-        List(filtered) { person in
+    private func sidebar(selection: Binding<String?>) -> some View {
+        List(filtered, selection: selection) { person in
             NavigationLink(value: person.id) { PersonRow(person: person) }
         }
-    }
-
-    /// Wide screens: the same rows as cards in a grid instead of one long row each.
-    private var grid: some View {
-        ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: theme.gridCardMinWidth), spacing: 16)], spacing: 16) {
-                ForEach(filtered) { person in
-                    NavigationLink(value: person.id) {
-                        PersonRow(person: person)
-                            .padding(14)
-                            .background(theme.surface, in: RoundedRectangle(cornerRadius: theme.cornerRadius))
-                    }
-                    .buttonStyle(PressScaleStyle())
-                    .foregroundStyle(theme.ink)
-                }
+        .overlay {
+            if people.isEmpty {
+                ContentUnavailableView(
+                    "No one yet",
+                    systemImage: "person.2",
+                    description: Text("People you meet show up here, with a summary after you talk.")
+                )
             }
-            .frame(maxWidth: theme.maxContentWidth)
-            .padding(theme.screenPadding)
-            .frame(maxWidth: .infinity)
         }
-        .contentMargins(.bottom, 24, for: .scrollContent)
+        .scrollContentBackground(.hidden)
+        .background(theme.background)
+        .searchable(text: $search, prompt: "Search people")
+        .navigationTitle("People")
+        .navigationSplitViewColumnWidth(min: theme.sidebarMinWidth, ideal: theme.sidebarIdealWidth,
+                                        max: theme.sidebarMaxWidth)
     }
 
     private var filtered: [PersonSummary] {
@@ -75,6 +64,38 @@ struct PeopleListView: View {
             for try await list in env.backend.people(userId: userId) { people = list }
         } catch {
             print("people stream ended:", error)
+        }
+    }
+}
+
+/// The detail column before anyone is picked (wide screens only: on a phone
+/// the list is showing instead).
+private struct NoPersonSelected: View {
+    var hasPeople: Bool
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        ZStack {
+            FlowingBackground(flow: 0.4)
+            VStack(spacing: 14) {
+                AvatarView(shape: .blob, color: theme.yellowStrong, expression: .happy,
+                           animated: true, seed: 7)
+                    .frame(width: 96, height: 96)
+                Text(hasPeople ? "Pick someone to catch up" : "No one here yet")
+                    .font(theme.title)
+                    .foregroundStyle(theme.strongInk)
+                    .multilineTextAlignment(.center)
+                Text(hasPeople
+                     ? "Choose a person from the list to see who they are and what you talked about."
+                     : "Wear your badge and walk around. Everyone you meet lands in the list, with a summary after you talk.")
+                    .font(theme.body)
+                    .foregroundStyle(theme.inkSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(28)
+            .frame(maxWidth: theme.readableCardWidth * 0.75)
+            .background(theme.surface.opacity(0.9), in: RoundedRectangle(cornerRadius: theme.cornerRadius))
+            .padding(theme.screenPadding)
         }
     }
 }
