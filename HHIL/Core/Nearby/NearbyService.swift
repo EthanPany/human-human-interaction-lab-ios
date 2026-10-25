@@ -74,6 +74,10 @@ final class NearbyService: NSObject {
         NISession.deviceCapabilities.supportsPreciseDistanceMeasurement
     }
 
+    /// Settings > Nearby switch: request extended range (both phones must be iPhone 15 or later).
+    static let extendedRangeKey = "nearby.extendedRange"
+    static var extendedRangeEnabled: Bool { UserDefaults.standard.bool(forKey: extendedRangeKey) }
+
     /// Second generation UWB (iPhone 15 and later) can range further.
     static var supportsExtendedRange: Bool {
         if #available(iOS 17.0, *) {
@@ -178,7 +182,11 @@ final class NearbyService: NSObject {
                     // Extended range only works when BOTH phones have the U2 chip
                     // (iPhone 15 and later); asking for it with an older peer
                     // (e.g. iPhone 14, U1) gives no readings at all. Standard
-                    // range (~9 m) already covers our 8 m glow, so leave it off.
+                    // range (~9 m) already covers our 8 m glow, so it is off
+                    // unless turned on in Settings > Nearby.
+                    if #available(iOS 17.0, *), Self.supportsExtendedRange, Self.extendedRangeEnabled {
+                        config.isExtendedDistanceMeasurementEnabled = true
+                    }
                     session.run(config)
                     runningWith[peer.userId] = encoded
                     diag.running = true

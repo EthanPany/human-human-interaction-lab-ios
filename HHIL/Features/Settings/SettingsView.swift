@@ -95,12 +95,18 @@ struct SettingsView: View {
 private struct NearbySection: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.theme) private var theme
+    @AppStorage(NearbyService.extendedRangeKey) private var extended = false
 
     var body: some View {
         let nearby = env.nearby
         Section {
             LabeledContent("Status", value: nearby.status.label)
-            LabeledContent("Range", value: nearby.extendedRange ? "Extended UWB" : "Standard UWB")
+            if nearby.extendedRange {
+                Toggle("Extended range", isOn: $extended)
+                    .onChange(of: extended) { _, _ in nearby.reset() }
+            } else {
+                LabeledContent("Range", value: "Standard UWB")
+            }
             if nearby.diagnostics.isEmpty {
                 Text("No other badges worn right now. Ranging runs only while badges are worn full screen, on both phones, signed in as different people.")
                     .font(theme.caption)
@@ -124,7 +130,7 @@ private struct NearbySection: View {
         } header: {
             Text("Nearby (UWB)")
         } footer: {
-            Text("A match starts to show within 8 m and you are together within 2 m (confirmed over about half a second). Ranging runs only while the badge is worn full screen; taking it off or leaving the app stops it on both phones at once.")
+            Text("A match starts to show within 8 m and you are together within 2 m (confirmed over about half a second). Ranging runs only while the badge is worn full screen; taking it off or leaving the app stops it on both phones at once. Extended range works only when both phones are iPhone 15 or later.")
         }
     }
 
