@@ -10,13 +10,27 @@ struct BadgeTabView: View {
     @GestureState private var lift: CGFloat = 0
 
     private static let pinchToWear: CGFloat = 1.15
+    /// Approximate display corner radius of current iPhones (points).
+    private static let screenCornerRadius: CGFloat = 55
     private static let liftToWear: CGFloat = -70
 
     var body: some View {
         @Bindable var badge = env.badge
         GeometryReader { geo in
-            // Keep the phone's proportions so the window is a true preview
-            let width = min(geo.size.width - 64, (geo.size.height - 150) * 0.5)
+            // A true preview: the same shape as this screen when the badge goes
+            // full screen (tall on a phone, wide on an open iPhone Duo or iPad),
+            // the same layout, and corners scaled from the screen's own.
+            let full = CGSize(
+                width: geo.size.width + geo.safeAreaInsets.leading + geo.safeAreaInsets.trailing,
+                height: geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom
+            )
+            let aspect = max(0.3, full.width / max(full.height, 1))
+            let box = CGSize(width: geo.size.width - 64, height: geo.size.height - 170)
+            let width = max(80, min(box.width, box.height * aspect))
+            let height = width / aspect
+            let scale = width / max(full.width, 1)
+            let radius = max(14, Self.screenCornerRadius * scale)
+            let orientation: BadgeConfiguration.Orientation = aspect > 1 ? .horizontal : .vertical
             VStack(spacing: 18) {
                 HStack {
                     Text("Badge").font(theme.largeTitle).foregroundStyle(theme.strongInk)
@@ -29,12 +43,12 @@ struct BadgeTabView: View {
                     }
                 }
 
-                BadgeView(presentation: .window)
-                    .frame(width: width, height: width * 2)
+                BadgeView(presentation: .window, orientation: orientation)
+                    .frame(width: width, height: height)
                     // Inner cards round concentrically with this frame
-                    .containerShape(RoundedRectangle(cornerRadius: theme.badgeCornerRadius))
-                    .clipShape(RoundedRectangle(cornerRadius: theme.badgeCornerRadius))
-                    .overlay(RoundedRectangle(cornerRadius: theme.badgeCornerRadius).stroke(.white, lineWidth: 6))
+                    .containerShape(RoundedRectangle(cornerRadius: radius))
+                    .clipShape(RoundedRectangle(cornerRadius: radius))
+                    .overlay(RoundedRectangle(cornerRadius: radius).stroke(.white, lineWidth: 6))
                     .shadow(color: .black.opacity(0.14), radius: 20, y: 10)
                     .scaleEffect(min(max(pinch, 0.95), 1.15) * (1 + min(0.12, -lift / 900)))
                     .offset(y: lift * 0.35)
