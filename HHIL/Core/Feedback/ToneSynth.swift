@@ -1,109 +1,151 @@
 import AVFoundation
 
 /// Renders the app's sounds into short PCM buffers once, at first use.
-/// One timbre for everything: sines with a touch of second harmonic, quick soft
-/// attacks and exponential decays, pitch glides for the bubbly ones and bell
-/// partials for chimes. No audio files, so nothing to license.
+///
+/// Sound design (water, warmth, a human touch), following common interactive
+/// sound practice:
+///  1. One family: every cue lives in D major pentatonic around D3 to D5, with the
+///     same timbre (rounded sines, a soft sub, gentle low pass), so the app has
+///     one voice instead of a pile of effects.
+///  2. Form follows the gesture: taps are single droplets, wearing is a rising
+///     pour, taking off falls, a drag is a slosh, a release wobbles like jelly.
+///  3. Frequency sets loudness: the more often a cue plays (taps, ticks), the
+///     shorter and quieter it is; rare moments (a match, saved) are richer.
+///  4. No sharp edges: 8 to 25 ms attacks, long rounded decays, everything low
+///     passed under about 2 kHz, nothing piercing.
+///  5. Warmth on small speakers: iPhone speakers can't play real bass, so low
+///     notes carry 2nd to 4th harmonics (the ear hears the missing fundamental)
+///     and a sub an octave down for headphones.
+///  6. Water: bubble style droplets glide UP in pitch as they decay (Minnaert
+///     resonance), with a slow tremolo or wobble for liquid movement.
+///  7. Sound and touch together: each cue fires with its haptic (Feedback.swift),
+///     and the haptics are kept round and low in sharpness to match.
+/// No audio files, so nothing to license.
 enum ToneSynth {
     struct Note {
         var start: Double = 0
         var freq: Double
         /// Glide from `from` to `freq` with this time constant (seconds).
         var from: Double? = nil
-        var glide: Double = 0.03
+        var glide: Double = 0.04
+        var attack: Double = 0.014
+        var decay: Double = 0.12
         var amp: Double = 1
-        var attack: Double = 0.004
-        var decay: Double = 0.08
         /// (multiple of freq, level)
-        var partials: [(Double, Double)] = [(1, 1), (2, 0.12)]
-        /// Wobble (rate Hz, depth as a fraction of freq, decay seconds): the jelly boing.
+        var partials: [(Double, Double)] = ToneSynth.water
+        /// Level of a sine one octave below (felt on headphones, implied on speakers).
+        var sub: Double = 0.3
+        /// Wobble (rate Hz, depth as a fraction of freq, decay seconds): jelly and water.
         var vibrato: (rate: Double, depth: Double, decay: Double)? = nil
+        /// Slow amplitude ripple (rate Hz, depth 0...1): liquid movement.
+        var tremolo: (rate: Double, depth: Double)? = nil
     }
 
-    static let soft: [(Double, Double)] = [(1, 1), (2, 0.12)]
-    static let bell: [(Double, Double)] = [(1, 1), (2, 0.28), (3.01, 0.08)]
-    static let round: [(Double, Double)] = [(1, 1), (2, 0.22), (3, 0.06)]
+    // D major pentatonic, low and warm
+    static let D3 = 146.83, E3 = 164.81, Fs3 = 185.0, A3 = 220.0, B3 = 246.94
+    static let D4 = 293.66, E4 = 329.63, Fs4 = 369.99, A4 = 440.0, B4 = 493.88, D5 = 587.33
+
+    static let water: [(Double, Double)] = [(1, 1), (2, 0.16), (3, 0.04)]
+    /// Low notes: strong low harmonics so phone speakers still say "bass".
+    static let warm: [(Double, Double)] = [(1, 1), (2, 0.55), (3, 0.28), (4, 0.1)]
+    static let glass: [(Double, Double)] = [(1, 1), (2, 0.2), (3.01, 0.05)]
 
     static func render(_ id: SoundID, format: AVAudioFormat) -> AVAudioPCMBuffer? {
-        let (notes, length, peak) = recipe(id)
-        return render(notes, length: length, peak: peak, format: format)
+        let (notes, length, peak, cutoff) = recipe(id)
+        return render(notes, length: length, peak: peak, cutoff: cutoff, format: format)
     }
 
-    // MARK: Recipes
+    /// A water droplet: rises in pitch as it rings out.
+    static func drop(_ start: Double, _ f: Double, amp: Double = 1, decay: Double = 0.1) -> Note {
+        Note(start: start, freq: f, from: f * 0.62, glide: 0.035, attack: 0.008, decay: decay, amp: amp, sub: 0.2)
+    }
 
-    // swiftlint:disable:next cyclomatic_complexity
-    static func recipe(_ id: SoundID) -> ([Note], Double, Double) {
+    // MARK: Recipes (notes, length s, peak level, low pass cutoff Hz)
+
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
+    static func recipe(_ id: SoundID) -> ([Note], Double, Double, Double) {
         switch id {
         case .tap:
-            return ([Note(freq: 1250, from: 1400, glide: 0.01, decay: 0.018)], 0.06, 0.22)
+            return ([drop(0, D5, decay: 0.06)], 0.22, 0.14, 2000)
         case .press:
-            return ([Note(freq: 440, from: 540, glide: 0.02, decay: 0.03, partials: round)], 0.09, 0.32)
+            return ([
+                drop(0, D4, decay: 0.09),
+                Note(freq: D3, attack: 0.01, decay: 0.06, amp: 0.55, partials: warm, sub: 0.5),
+            ], 0.3, 0.22, 1500)
         case .tab:
-            return ([Note(freq: 940, decay: 0.022)], 0.07, 0.2)
+            return ([drop(0, Fs4, decay: 0.07)], 0.24, 0.15, 1800)
         case .toggleOn:
-            return ([Note(freq: 660, decay: 0.03), Note(start: 0.05, freq: 990, decay: 0.05)], 0.16, 0.26)
+            return ([drop(0, D4, amp: 0.8, decay: 0.07), drop(0.07, A4, decay: 0.1)], 0.36, 0.18, 1800)
         case .toggleOff:
-            return ([Note(freq: 990, decay: 0.03), Note(start: 0.05, freq: 660, decay: 0.05)], 0.16, 0.24)
+            return ([drop(0, A4, amp: 0.8, decay: 0.07), drop(0.07, D4, decay: 0.1)], 0.36, 0.17, 1800)
         case .wear:
+            // A pour: droplets climbing over a warm swell
             return ([
-                Note(freq: 784, from: 392, glide: 0.07, attack: 0.01, decay: 0.14),
-                Note(start: 0.12, freq: 1568, amp: 0.35, decay: 0.12, partials: bell),
-            ], 0.42, 0.34)
+                Note(freq: D3, attack: 0.08, decay: 0.3, amp: 0.7, partials: warm, sub: 0.5, tremolo: (5.5, 0.25)),
+                drop(0.03, D4, amp: 0.8), drop(0.11, Fs4, amp: 0.8), drop(0.19, A4, decay: 0.22),
+            ], 0.85, 0.26, 1900)
         case .takeOff:
-            return ([Note(freq: 392, from: 784, glide: 0.07, attack: 0.008, decay: 0.12)], 0.34, 0.3)
+            return ([
+                Note(freq: D3, from: Fs3, glide: 0.12, attack: 0.05, decay: 0.25, amp: 0.7, partials: warm, sub: 0.5),
+                drop(0, A4, amp: 0.7), drop(0.08, Fs4, amp: 0.7), drop(0.16, D4, decay: 0.18),
+            ], 0.75, 0.24, 1600)
         case .poke:
-            return ([Note(freq: 420, from: 250, glide: 0.015, decay: 0.03, partials: round)], 0.08, 0.3)
+            // A squishy bloop
+            return ([Note(freq: B3, from: E3, glide: 0.035, attack: 0.012, decay: 0.1, partials: warm, sub: 0.4,
+                          vibrato: (rate: 7, depth: 0.04, decay: 0.08))], 0.3, 0.22, 1300)
         case .pop:
-            return ([
-                Note(freq: 1150, from: 380, glide: 0.02, attack: 0.002, decay: 0.035),
-                Note(start: 0.055, freq: 1900, from: 1400, glide: 0.012, amp: 0.4, decay: 0.025),
-            ], 0.13, 0.34)
+            return ([drop(0, A4, decay: 0.08), drop(0.06, D5, amp: 0.45, decay: 0.07)], 0.34, 0.2, 2000)
         case .land:
-            return ([Note(freq: 260, from: 330, glide: 0.02, decay: 0.03, partials: round)], 0.07, 0.2)
+            return ([Note(freq: D3, from: Fs3, glide: 0.03, attack: 0.01, decay: 0.08, partials: warm, sub: 0.5)],
+                    0.26, 0.2, 900)
         case .boingSmall:
-            return ([Note(freq: 420, from: 640, glide: 0.04, attack: 0.003, decay: 0.12,
-                          vibrato: (rate: 12, depth: 0.09, decay: 0.12))], 0.36, 0.3)
+            return ([Note(freq: B3, from: E4, glide: 0.06, attack: 0.012, decay: 0.24, partials: warm, sub: 0.35,
+                          vibrato: (rate: 6, depth: 0.07, decay: 0.26))], 0.7, 0.24, 1300)
         case .boingBig:
-            return ([Note(freq: 300, from: 560, glide: 0.06, attack: 0.003, decay: 0.2,
-                          vibrato: (rate: 9, depth: 0.14, decay: 0.2))], 0.6, 0.36)
+            return ([Note(freq: Fs3, from: D4, glide: 0.08, attack: 0.014, decay: 0.38, partials: warm, sub: 0.45,
+                          vibrato: (rate: 4.8, depth: 0.1, decay: 0.4))], 1.1, 0.28, 1150)
         case .chime:
+            // A match appears: a rising, bubbly chord over a soft pad
             return ([
-                Note(freq: 659.3, decay: 0.22, partials: bell),
-                Note(start: 0.11, freq: 987.8, decay: 0.38, partials: bell),
-            ], 0.95, 0.32)
+                Note(freq: D3, attack: 0.12, decay: 0.45, amp: 0.55, partials: warm, sub: 0.4, tremolo: (4.5, 0.3)),
+                drop(0.0, D4, amp: 0.7, decay: 0.3), drop(0.08, Fs4, amp: 0.7, decay: 0.3),
+                drop(0.16, A4, amp: 0.75, decay: 0.35), drop(0.26, D5, amp: 0.5, decay: 0.45),
+            ], 1.5, 0.26, 2100)
         case .tick(let step):
-            // A soft "lub dub": main ping, then a lower, quieter echo.
-            let f = 440 * pow(2, Double(step) / Double(SoundID.tickSteps - 1) * 0.75) // 440 to 740 Hz
+            // A muffled heartbeat under water: lub dub, faster and a bit higher as they come closer
+            let x = Double(step) / Double(SoundID.tickSteps - 1)
+            let f = 98 * pow(2, x * 0.5) // about G2 to D3
             return ([
-                Note(freq: f, attack: 0.006, decay: 0.07, partials: bell),
-                Note(start: 0.13, freq: f * 0.84, amp: 0.55, attack: 0.006, decay: 0.06, partials: bell),
-            ], 0.45, 0.24)
+                Note(freq: f, from: f * 1.25, glide: 0.02, attack: 0.012, decay: 0.09, partials: warm, sub: 0.6),
+                Note(start: 0.17, freq: f * 0.9, from: f * 1.1, glide: 0.02, attack: 0.012, decay: 0.08,
+                     amp: 0.6, partials: warm, sub: 0.6),
+            ], 0.5, 0.22 + 0.08 * x, 700 + 400 * x)
         case .talk:
             return ([
-                Note(freq: 392, from: 360, glide: 0.02, decay: 0.08, partials: round),
-                Note(start: 0.1, freq: 523.3, from: 480, glide: 0.02, decay: 0.12, partials: round),
-            ], 0.5, 0.3)
+                Note(freq: D3, attack: 0.06, decay: 0.3, amp: 0.6, partials: warm, sub: 0.4, tremolo: (5, 0.25)),
+                drop(0.02, D4, decay: 0.16), drop(0.12, Fs4, decay: 0.22),
+            ], 0.8, 0.24, 1700)
         case .celebrate:
-            let pitches: [Double] = [523.3, 659.3, 784, 1046.5]
-            var notes: [Note] = []
-            for (i, f) in pitches.enumerated() {
-                let last = i == pitches.count - 1
-                notes.append(Note(start: Double(i) * 0.075, freq: f, amp: last ? 1 : 0.8,
-                                  decay: last ? 0.42 : 0.12, partials: bell))
+            // Saved: a warm pour that settles
+            var notes: [Note] = [
+                Note(freq: D3, attack: 0.15, decay: 0.6, amp: 0.6, partials: warm, sub: 0.45, tremolo: (4, 0.3)),
+            ]
+            for (i, f) in [D4, Fs4, A4, B4, D5].enumerated() {
+                notes.append(drop(Double(i) * 0.08, f, amp: i == 4 ? 0.7 : 0.75, decay: i == 4 ? 0.5 : 0.18))
             }
-            notes.append(Note(start: 0.3, freq: 1568, amp: 0.25, decay: 0.3, partials: bell))
-            return (notes, 1.25, 0.32)
+            return (notes, 1.6, 0.27, 2100)
         case .error:
             return ([
-                Note(freq: 440, decay: 0.07, partials: round),
-                Note(start: 0.12, freq: 349.2, decay: 0.1, partials: round),
-            ], 0.4, 0.28)
+                Note(freq: A3, attack: 0.015, decay: 0.12, partials: warm, sub: 0.4),
+                Note(start: 0.14, freq: Fs3, attack: 0.015, decay: 0.16, partials: warm, sub: 0.4),
+            ], 0.6, 0.22, 1100)
         }
     }
 
     // MARK: Rendering
 
-    static func render(_ notes: [Note], length: Double, peak: Double, format: AVAudioFormat) -> AVAudioPCMBuffer? {
+    static func render(_ notes: [Note], length: Double, peak: Double, cutoff: Double,
+                       format: AVAudioFormat) -> AVAudioPCMBuffer? {
         let sr = format.sampleRate
         let frames = AVAudioFrameCount(length * sr)
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames),
@@ -127,20 +169,32 @@ enum ToneSynth {
                     f *= 1 + v.depth * exp(-t / v.decay) * sin(2 * .pi * v.rate * t)
                 }
                 phase += 2 * .pi * f / sr
-                // Smooth attack, exponential decay
-                let a = t < note.attack ? sin(.pi / 2 * t / note.attack) : exp(-(t - note.attack) / note.decay)
-                if a < 0.0005 && t > note.attack { break }
-                var s = 0.0
+                // Rounded attack (raised cosine), exponential decay
+                var a = t < note.attack
+                    ? 0.5 - 0.5 * cos(.pi * t / note.attack)
+                    : exp(-(t - note.attack) / note.decay)
+                if a < 0.0004 && t > note.attack { break }
+                if let tr = note.tremolo { a *= 1 - tr.depth * (0.5 + 0.5 * sin(2 * .pi * tr.rate * t)) }
+                var s = sin(phase * 0.5) * note.sub
                 for (mult, level) in note.partials { s += sin(phase * mult) * level }
                 out[i] += Float(s * a * note.amp)
             }
+        }
+
+        // Two pole low pass (two cascaded one poles): rounds every edge
+        let k = Float(1 - exp(-2 * .pi * cutoff / sr))
+        var y1: Float = 0, y2: Float = 0
+        for i in 0..<n {
+            y1 += k * (out[i] - y1)
+            y2 += k * (y1 - y2)
+            out[i] = y2
         }
 
         // Normalize to the recipe's level and fade the tail to avoid clicks
         var maxValue: Float = 0
         for i in 0..<n { maxValue = max(maxValue, abs(out[i])) }
         let gain = maxValue > 0 ? Float(peak) / maxValue : 0
-        let fade = min(n, Int(0.008 * sr))
+        let fade = min(n, Int(0.03 * sr))
         for i in 0..<n {
             var g = gain
             if i >= n - fade { g *= Float(n - i) / Float(fade) }

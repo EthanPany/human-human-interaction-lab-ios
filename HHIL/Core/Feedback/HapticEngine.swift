@@ -46,7 +46,8 @@ final class HapticEngine {
         let events = taps.map { t, i, s in
             CHHapticEvent(eventType: .hapticTransient, parameters: [
                 CHHapticEventParameter(parameterID: .hapticIntensity, value: Float(i)),
-                CHHapticEventParameter(parameterID: .hapticSharpness, value: Float(s)),
+                // Round, not clicky: keep sharpness low to match the watery sounds
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: Float(s) * 0.45),
             ], relativeTime: t)
         }
         do {
@@ -84,7 +85,7 @@ final class HapticEngine {
         let s = Float(max(0, min(1, stretch)))
         try? player.sendParameters([
             CHHapticDynamicParameter(parameterID: .hapticIntensityControl, value: 0.08 + 0.42 * s, relativeTime: 0),
-            CHHapticDynamicParameter(parameterID: .hapticSharpnessControl, value: -0.2 + 0.45 * s, relativeTime: 0),
+            CHHapticDynamicParameter(parameterID: .hapticSharpnessControl, value: -0.35 + 0.3 * s, relativeTime: 0),
         ], atTime: CHHapticTimeImmediate)
     }
 

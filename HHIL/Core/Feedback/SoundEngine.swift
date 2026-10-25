@@ -101,21 +101,21 @@ final class SoundEngine {
     }
 }
 
-/// The live squish voice: a soft rubbery tone whose pitch follows the stretch
+/// The live squish voice: a low, watery slosh whose pitch and brightness follow the stretch
 /// and whose loudness follows how fast the finger moves, so holding still is
 /// nearly silent. Parameters are written from the main thread and read, smoothed,
 /// on the audio thread (aligned Float writes, no locks, no allocation).
 final class SquishVoice {
     private let params: UnsafeMutablePointer<Float> // [stretch, motion]
-    private let state: UnsafeMutablePointer<Float>  // [phase, wobble, amp, freq], audio thread only
+    private let state: UnsafeMutablePointer<Float>  // [phase, wobble, amp, freq, lp1, lp2], audio thread only
     private(set) var isActive = false
 
     init() {
         params = .allocate(capacity: 2)
         params.initialize(repeating: 0, count: 2)
-        state = .allocate(capacity: 4)
-        state.initialize(repeating: 0, count: 4)
-        state[3] = 150
+        state = .allocate(capacity: 6)
+        state.initialize(repeating: 0, count: 6)
+        state[3] = 110
     }
 
     deinit {
@@ -142,9 +142,13 @@ final class SquishVoice {
             let buffers = UnsafeMutableAudioBufferListPointer(bufferList)
             let stretch = params[0], motion = params[1]
             var phase = state[0], wobble = state[1], amp = state[2], freq = state[3]
-            defer { state[0] = phase; state[1] = wobble; state[2] = amp; state[3] = freq }
-            let targetAmp = 0.16 * stretch.squareRoot() * (0.12 + 0.88 * motion)
-            let targetFreq = 150 + 330 * stretch
+            var lp1 = state[4], lp2 = state[5]
+            defer { state[0] = phase; state[1] = wobble; state[2] = amp; state[3] = freq; state[4] = lp1; state[5] = lp2 }
+            let targetAmp = 0.2 * stretch.squareRoot() * (0.15 + 0.85 * motion)
+            let targetFreq = 98 + 150 * stretch // G2 up to about D3/E3
+            // The filter opens as it stretches: muffled slosh to a brighter one
+            let cutoff = 450 + 1100 * stretch
+            let k = 1 - exp(-twoPi * cutoff / sr)
             if targetAmp < 0.0005 && amp < 0.0005 {
                 amp = 0
                 for buffer in buffers {
@@ -156,12 +160,17 @@ final class SquishVoice {
             for frame in 0..<Int(frameCount) {
                 amp += (targetAmp - amp) * smooth
                 freq += (targetFreq - freq) * smooth
-                wobble += twoPi * 7 / sr
+                wobble += twoPi * 4.5 / sr
                 if wobble > twoPi { wobble -= twoPi }
-                let f = freq * (1 + 0.025 * sin(wobble))
+                let f = freq * (1 + 0.05 * sin(wobble))
                 phase += twoPi * f / sr
                 if phase > twoPi { phase -= twoPi }
-                let s = (sin(phase) + 0.25 * sin(2 * phase) + 0.06 * sin(3 * phase)) * amp
+                // Warm harmonics so phone speakers still carry the low body, plus a liquid ripple
+                let raw = (0.35 * sin(phase * 0.5) + sin(phase) + 0.5 * sin(2 * phase) + 0.22 * sin(3 * phase))
+                    * (0.8 + 0.2 * sin(wobble * 2)) * amp
+                lp1 += k * (raw - lp1)
+                lp2 += k * (lp1 - lp2)
+                let s = lp2
                 for buffer in buffers {
                     buffer.mData?.assumingMemoryBound(to: Float.self)[frame] = s
                 }
