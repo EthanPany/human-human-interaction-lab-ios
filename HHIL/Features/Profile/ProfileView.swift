@@ -15,6 +15,7 @@ struct ProfileView: View {
     @State private var newMoment: PhotosPickerItem?
     @State private var momentCaption = ""
     @State private var pendingMoment: Data?
+    @State private var width: CGFloat = 0
 
     var body: some View {
         let p = env.session.profile
@@ -24,15 +25,17 @@ struct ProfileView: View {
                 ScrollView {
                     VStack(spacing: 20) {
                         topBar
-                        identity(p)
-                        interests(p)
-                        eventBlock(p)
-                        agentBlock
+                        columns(p)
                     }
+                    .frame(maxWidth: theme.maxContentWidth)
                     .padding(.horizontal, theme.screenPadding)
                     .padding(.bottom, 32)
+                    .frame(maxWidth: .infinity)
                 }
+                // Room to scroll the last card clear of the floating tab bar
+                .contentMargins(.bottom, 24, for: .scrollContent)
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $editing) { ProfileEditView() }
@@ -50,6 +53,45 @@ struct ProfileView: View {
                 Button("Cancel", role: .cancel) { pendingMoment = nil }
             }
         }
+    }
+
+    // MARK: Layout
+
+    /// One column on a phone, two or three side by side on wide screens, each
+    /// a stack of cards (so cards keep a readable width instead of stretching).
+    private var columnCount: Int {
+        if width >= theme.threeColumnWidth { return 3 }
+        if width >= theme.twoColumnWidth { return 2 }
+        return 1
+    }
+
+    @ViewBuilder
+    private func columns(_ p: UserProfile?) -> some View {
+        switch columnCount {
+        case 3:
+            HStack(alignment: .top, spacing: 20) {
+                column { identity(p); agentBlock }
+                column { interests(p) }
+                column { eventBlock(p) }
+            }
+        case 2:
+            HStack(alignment: .top, spacing: 20) {
+                column { identity(p); eventBlock(p); agentBlock }
+                column { interests(p) }
+            }
+        default:
+            VStack(spacing: 20) {
+                identity(p)
+                interests(p)
+                eventBlock(p)
+                agentBlock
+            }
+        }
+    }
+
+    private func column<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(spacing: 20) { content() }
+            .frame(maxWidth: .infinity, alignment: .top)
     }
 
     // MARK: Blocks

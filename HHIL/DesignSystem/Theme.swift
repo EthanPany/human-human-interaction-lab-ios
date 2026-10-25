@@ -38,6 +38,13 @@ struct Theme {
     var badgeCornerRadius: CGFloat = 40
     var spacing: CGFloat = 20
     var screenPadding: CGFloat = 18
+    /// Wide screens (iPad, the unfolded Duo, landscape) lay pages out in
+    /// columns: two from this width, three from the next, never wider than the cap.
+    var twoColumnWidth: CGFloat = 700
+    var threeColumnWidth: CGFloat = 1100
+    var maxContentWidth: CGFloat = 1400
+    /// Narrowest a card in a grid of people gets.
+    var gridCardMinWidth: CGFloat = 300
 
     // Type (General Sans, falls back to the system font if not bundled)
     var largeTitle = Font.brand(34, .semibold)
