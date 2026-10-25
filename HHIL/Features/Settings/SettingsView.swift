@@ -124,7 +124,7 @@ private struct NearbySection: View {
         } header: {
             Text("Nearby (UWB)")
         } footer: {
-            Text("A match starts to show within 10 m and you are together within 3 m. Ranging runs only while the badge is worn full screen; taking it off or leaving the app stops it on both phones at once.")
+            Text("A match starts to show within 8 m and you are together within 2 m (confirmed over about half a second). Ranging runs only while the badge is worn full screen; taking it off or leaving the app stops it on both phones at once.")
         }
     }
 

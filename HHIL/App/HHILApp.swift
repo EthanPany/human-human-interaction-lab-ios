@@ -4,6 +4,7 @@ import SwiftUI
 struct HHILApp: App {
     @State private var env = AppEnvironment.live()
     @Environment(\.scenePhase) private var scenePhase
+    @State private var rangingOff: Task<Void, Never>?
 
     var body: some Scene {
         WindowGroup {
@@ -25,7 +26,20 @@ struct HHILApp: App {
         }
     }
 
+    /// Leaving the app stops ranging at once. Taking the badge off waits out
+    /// BadgeStore.takeOffGrace first, so an accidental swipe out and straight
+    /// back in keeps the UWB sessions (and the recording) going.
     private func updateRanging() {
-        env.nearby.setActive(env.badge.isWorn && scenePhase == .active)
+        rangingOff?.cancel()
+        let on = env.badge.isWorn && scenePhase == .active
+        if on || scenePhase != .active {
+            env.nearby.setActive(on)
+            return
+        }
+        rangingOff = Task {
+            try? await Task.sleep(for: BadgeStore.takeOffGrace)
+            guard !Task.isCancelled, !env.badge.isWorn else { return }
+            env.nearby.setActive(false)
+        }
     }
 }

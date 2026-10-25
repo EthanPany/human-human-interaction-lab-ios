@@ -54,10 +54,10 @@ struct BadgeView: View {
 
     /// The server decides who the match is; how close they are comes straight
     /// from this phone's UWB reading when it has one (no round trip), on the
-    /// same scale as the server: shows from 10 m, full strength at 3 m.
+    /// same scale as the server: shows from 8 m, full strength at 2 m.
     private static func closeness(state: BadgeState, localMeters: Double?) -> Double {
         guard state.mode == .match || state.mode == .connected, let m = localMeters else { return state.closeness }
-        return max(0, min(1, (10 - m) / (10 - 3)))
+        return max(0, min(1, (8 - m) / (8 - 2)))
     }
 
     /// Match topics from the backend while someone is near, else my own tags

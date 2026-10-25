@@ -16,6 +16,7 @@ final class BadgeStore {
             guard isWorn != oldValue else { return }
             Feedback.shared.play(isWorn ? .wear : .takeOff)
             cues.isWorn = isWorn
+            wornChanged()
         }
     }
     /// Set by the Badge tab while its preview is on screen (for the approach cues).
@@ -48,12 +49,22 @@ final class BadgeStore {
     private var metPeerId: String?
     private var lastTogether = Date.distantPast
     private var lastMeetAt = Date.distantPast
+    /// Readings in a row on the near (or far) side, per peer, and since when.
+    private var streak: (peerId: String, near: Bool, count: Int, since: Date)?
+    private var takeOffTask: Task<Void, Never>?
 
     /// Same as TALK_DISTANCE_M in backend/convex/lib/constants.ts. Checked on
     /// every local UWB reading, so the moment fires without waiting for the server.
-    static let meetDistance = 3.0
+    static let meetDistance = 2.0
     /// Further than this, we have parted (same as TALK_EXIT_DISTANCE_M).
-    static let apartDistance = 4.5
+    static let apartDistance = 3.0
+    /// UWB readings jump around: this many readings in a row, over at least
+    /// this long, confirm we came together (or parted). About half a second.
+    static let confirmReadings = 3
+    static let confirmTime: TimeInterval = 0.4
+    /// Taking the badge off stops the recording after this long (an accidental
+    /// swipe out and straight back in keeps it going).
+    static let takeOffGrace: Duration = .seconds(2)
     /// Apart at least this long before meeting the same person counts again.
     static let meetAgainAfter: TimeInterval = 20
     /// Out of the talking state this long before the conversation really ends.
@@ -112,12 +123,27 @@ final class BadgeStore {
 
     /// This phone's smoothed UWB distance to a peer (NearbyService, a few times a second).
     func nearbyDistance(peerId: String, meters: Double) {
-        if peerId == togetherWith, meters > Self.apartDistance {
+        let now = Date()
+        // Which side of the line is this reading on? Between the two distances
+        // keeps whatever we were (no flicker right at the threshold).
+        let near: Bool? = meters <= Self.meetDistance ? true : (meters > Self.apartDistance ? false : nil)
+        if let near {
+            if let s = streak, s.peerId == peerId, s.near == near {
+                streak = (peerId, near, s.count + 1, s.since)
+            } else {
+                streak = (peerId, near, 1, now)
+            }
+        }
+        let confirmed = streak.map {
+            $0.peerId == peerId && $0.count >= Self.confirmReadings && now.timeIntervalSince($0.since) >= Self.confirmTime
+        } ?? false
+
+        if peerId == togetherWith, near == false, confirmed {
             togetherWith = nil
             cues.together = false
         }
-        if peerId == togetherWith { lastTogether = Date() }
-        guard peerId == state.peerId, state.mode != .idle, meters <= Self.meetDistance else { return }
+        if peerId == togetherWith { lastTogether = now }
+        guard isWorn, peerId == state.peerId, state.mode != .idle, near == true, confirmed else { return }
         meet(peerId)
     }
 
@@ -163,9 +189,10 @@ final class BadgeStore {
             cues.together = false
         }
         // Talking means we're together, even if this phone has no reading of its own.
-        if new.mode == .talking, let peerId = new.peerId { meet(peerId) }
+        if new.mode == .talking, isWorn, let peerId = new.peerId { meet(peerId) }
 
-        if new.mode == .talking, let id = new.conversationId {
+        // Only a badge that is worn records (taking it off stops the recording).
+        if new.mode == .talking, isWorn, let id = new.conversationId {
             if id == activeConversationId {
                 // Back in the same conversation after a blip: keep recording.
                 leaveTask?.cancel()
@@ -186,6 +213,18 @@ final class BadgeStore {
                 guard !Task.isCancelled else { return }
                 await self.leave(id)
             }
+        }
+    }
+
+    /// Badge put on or taken off. Off for longer than the grace ends the conversation here.
+    private func wornChanged() {
+        takeOffTask?.cancel()
+        takeOffTask = nil
+        guard !isWorn, let id = activeConversationId else { return }
+        takeOffTask = Task {
+            try? await Task.sleep(for: Self.takeOffGrace)
+            guard !Task.isCancelled, !self.isWorn else { return }
+            await self.leave(id)
         }
     }
 
