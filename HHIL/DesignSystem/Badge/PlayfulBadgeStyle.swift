@@ -33,14 +33,14 @@ private struct PlayfulBadge: View {
 
                 if horizontal {
                     HStack(spacing: 14 * scale) {
-                        IdentityCard(c: c, scale: scale, nameSize: 92 * scale, shape: shape)
+                        IdentityCard(c: c, scale: scale, nameSize: 92 * scale, shape: shape, avatarSpace: 100 * scale)
                             .frame(width: geo.size.width * 0.54)
                         keywords(scale: scale, size: 40 * scale, shape: shape)
                     }
                     .padding(pad)
                 } else {
                     VStack(spacing: 14 * scale) {
-                        IdentityCard(c: c, scale: scale, nameSize: 96 * scale, shape: shape)
+                        IdentityCard(c: c, scale: scale, nameSize: 96 * scale, shape: shape, avatarSpace: 120 * scale)
                             .frame(height: geo.size.height * 0.54)
                         keywords(scale: scale, size: 42 * scale, shape: shape)
                     }

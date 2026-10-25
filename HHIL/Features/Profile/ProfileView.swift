@@ -73,8 +73,11 @@ struct ProfileView: View {
     }
 
     private func identity(_ p: UserProfile?) -> some View {
-        IdentityCard(c: previewConfiguration(p), scale: 0.91, nameSize: 76)
-            .frame(height: 230)
+        // Sized by its content: the room on top holds the customize button and
+        // the avatar, and the card grows down as far as the name needs.
+        IdentityCard(c: previewConfiguration(p), scale: 0.91, nameSize: 76,
+                     avatarSpace: 112, minHeight: 230)
+            .fixedSize(horizontal: false, vertical: true)
             .overlay(alignment: .topLeading) {
                 IconButton(systemImage: "paintpalette", label: "Customize badge") { customizing = true }
                     .padding(12)

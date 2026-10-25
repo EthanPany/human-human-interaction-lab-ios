@@ -16,8 +16,6 @@ struct AvatarEditorView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var loaded = false
 
-    private let swatches = ["#FF6C6E", "#FFEA82", "#EB8FFF", "#A9F48E", "#87D9FB", "#509DF8", "#3BB52D", "#45D0DD", "#F8CD4C", "#FAA752"]
-
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -53,68 +51,18 @@ struct AvatarEditorView: View {
     // MARK: Sections
 
     private var preview: some View {
-        AvatarView(shape: shape, color: Color(hex: colorHex), expression: expression, seed: 1)
-            .frame(width: 180, height: 180)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .background(FlowingBackground(flow: 0.8).clipShape(RoundedRectangle(cornerRadius: theme.cornerRadius)))
-            .contentShape(Rectangle())
-            .onTapGesture { cycleExpression() }
-            .accessibilityHint("Tap to try its moods")
+        AvatarPreview(shape: shape, colorHex: colorHex, expression: $expression)
     }
 
     private var shapes: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionLabel(text: "Shape")
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
-                ForEach(AvatarShapeKind.allCases) { kind in
-                    Button {
-                        shape = kind
-                        save(ProfilePatch(avatarShape: kind.rawValue))
-                    } label: {
-                        VStack(spacing: 4) {
-                            AvatarView(shape: kind, color: Color(hex: colorHex), animated: false, seed: kind.hashValue)
-                                .frame(width: 54, height: 54)
-                            Text(kind.displayName).font(theme.caption).foregroundStyle(theme.ink)
-                        }
-                        .padding(8)
-                        .frame(maxWidth: .infinity)
-                        .background(theme.surface, in: RoundedRectangle(cornerRadius: 14))
-                        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.strongInk, lineWidth: shape == kind ? 2 : 0))
-                    }
-                    .buttonStyle(PressScaleStyle())
-                    .accessibilityAddTraits(shape == kind ? .isSelected : [])
-                }
-            }
+        AvatarShapeGrid(selection: shape, colorHex: colorHex) { kind in
+            shape = kind
+            save(ProfilePatch(avatarShape: kind.rawValue))
         }
     }
 
     private var colors: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionLabel(text: "Color")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(swatches, id: \.self) { hex in
-                        Button {
-                            pick(hex)
-                        } label: {
-                            Circle()
-                                .fill(Color(hex: hex))
-                                .frame(width: 40, height: 40)
-                                .overlay(Circle().strokeBorder(theme.strongInk, lineWidth: colorHex == hex ? 3 : 0))
-                        }
-                        .accessibilityLabel("Color \(hex)")
-                    }
-                    ColorPicker("Custom color", selection: $customColor, supportsOpacity: false)
-                        .labelsHidden()
-                        .frame(width: 40, height: 40)
-                }
-                .padding(.vertical, 4)
-            }
-            .onChange(of: customColor) { _, color in
-                if loaded, let hex = color.hexString, hex != colorHex { pick(hex) }
-            }
-        }
+        AvatarColorRow(selection: colorHex, customColor: $customColor, isReady: loaded) { hex in pick(hex) }
     }
 
     private var layoutPicker: some View {
@@ -177,11 +125,102 @@ struct AvatarEditorView: View {
     private func save(_ patch: ProfilePatch) {
         Task { await env.session.update(patch) }
     }
+}
 
-    private func cycleExpression() {
-        let all = AvatarExpression.allCases
-        let next = all[((all.firstIndex(of: expression) ?? 0) + 1) % all.count]
-        expression = next
+// MARK: Pieces shared with the avatar step of onboarding
+
+/// The live avatar on the flowing background. Tap it to try its moods.
+struct AvatarPreview: View {
+    var shape: AvatarShapeKind
+    var colorHex: String
+    @Binding var expression: AvatarExpression
+    var size: CGFloat = 180
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        AvatarView(shape: shape, color: Color(hex: colorHex), expression: expression, seed: 1)
+            .frame(width: size, height: size)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(FlowingBackground(flow: 0.8).clipShape(RoundedRectangle(cornerRadius: theme.cornerRadius)))
+            .contentShape(Rectangle())
+            .onTapGesture {
+                let all = AvatarExpression.allCases
+                expression = all[((all.firstIndex(of: expression) ?? 0) + 1) % all.count]
+            }
+            .accessibilityHint("Tap to try its moods")
+    }
+}
+
+/// Every avatar shape in the chosen color, the selected one outlined.
+struct AvatarShapeGrid: View {
+    var selection: AvatarShapeKind
+    var colorHex: String
+    var onPick: (AvatarShapeKind) -> Void
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionLabel(text: "Shape")
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
+                ForEach(AvatarShapeKind.allCases) { kind in
+                    Button {
+                        onPick(kind)
+                    } label: {
+                        VStack(spacing: 4) {
+                            AvatarView(shape: kind, color: Color(hex: colorHex), animated: false, seed: kind.hashValue)
+                                .frame(width: 54, height: 54)
+                            Text(kind.displayName).font(theme.caption).foregroundStyle(theme.ink)
+                        }
+                        .padding(8)
+                        .frame(maxWidth: .infinity)
+                        .background(theme.surface, in: RoundedRectangle(cornerRadius: 14))
+                        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.strongInk, lineWidth: selection == kind ? 2 : 0))
+                    }
+                    .buttonStyle(PressScaleStyle())
+                    .accessibilityLabel(kind.displayName)
+                    .accessibilityAddTraits(selection == kind ? .isSelected : [])
+                }
+            }
+        }
+    }
+}
+
+/// The theme's avatar swatches and a custom color well.
+struct AvatarColorRow: View {
+    var selection: String
+    @Binding var customColor: Color
+    /// False while the screen loads its saved values (so the well's first value isn't a pick).
+    var isReady = true
+    var onPick: (String) -> Void
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionLabel(text: "Color")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(theme.avatarSwatches, id: \.self) { hex in
+                        Button {
+                            onPick(hex)
+                        } label: {
+                            Circle()
+                                .fill(Color(hex: hex))
+                                .frame(width: 40, height: 40)
+                                .overlay(Circle().strokeBorder(theme.strongInk, lineWidth: selection == hex ? 3 : 0))
+                        }
+                        .accessibilityLabel("Color \(hex)")
+                    }
+                    ColorPicker("Custom color", selection: $customColor, supportsOpacity: false)
+                        .labelsHidden()
+                        .frame(width: 40, height: 40)
+                }
+                .padding(.vertical, 4)
+            }
+            .onChange(of: customColor) { _, color in
+                if isReady, let hex = color.hexString, hex != selection { onPick(hex) }
+            }
+        }
     }
 }
 

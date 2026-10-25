@@ -51,6 +51,27 @@ struct Theme {
     /// Small labels above a value ("Looking for", "I can help with").
     var fieldLabel = Font.brand(13, .semibold)
 
+    /// The name on the identity card: first name biggest, the rest of the name
+    /// a step down and pulled up close under it, both tracked a little tight.
+    var nameLastRatio: CGFloat = 0.64
+    /// Below this last to first ratio the first name shrinks too, so a very
+    /// long last name never ends up tiny under a huge first name.
+    var nameLastMinRatio: CGFloat = 0.48
+    /// Space between the two name lines, in first name ems (negative pulls them together).
+    var nameLineGap: CGFloat = -0.12
+    /// Letter spacing of the name, in ems.
+    var nameTracking: CGFloat = -0.025
+    /// Company under the name, relative to the first name.
+    var nameCompanyRatio: CGFloat = 0.34
+    var nameWeight: Font.Weight = .bold
+    var nameLastWeight: Font.Weight = .semibold
+
+    /// Avatar colors offered in setup and in the badge editor.
+    var avatarSwatches: [String] = [
+        "#FF6C6E", "#FFEA82", "#EB8FFF", "#A9F48E", "#87D9FB",
+        "#509DF8", "#3BB52D", "#45D0DD", "#F8CD4C", "#FAA752",
+    ]
+
     /// Buttons and pills sit close on their shadow: on the shape only, never the label.
     var shadowColor = Color.black.opacity(0.22)
     var shadowRadius: CGFloat = 0.75

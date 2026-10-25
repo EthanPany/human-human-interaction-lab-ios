@@ -12,10 +12,11 @@ final class ScreenshotTests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
     }
 
-    /// Signed out: sign in, then the setup choice that follows.
+    /// Signed out: sign up with a long name, pick an avatar, the setup choice,
+    /// then the long name on the Profile tab and on the worn badge.
     func testSignedOut() {
         let app = XCUIApplication()
-        app.launchArguments = ["-uiTestSignedOut", "-didChooseSetup", "NO"]
+        app.launchArguments = ["-uiTestSignedOut", "-didChooseSetup", "NO", "-avatarSetupDone.me", "NO"]
         app.launch()
 
         let phone = app.textFields["Phone number"]
@@ -26,16 +27,44 @@ final class ScreenshotTests: XCTestCase {
         phone.tap()
         phone.typeText("5555550100")
         let name = app.textFields["Name"]
-        if name.exists { name.tap(); name.typeText("Ethan") }
+        if name.exists { name.tap(); name.typeText("Alexandria Montgomery") }
         snap("02-sign-in-filled")
 
         let continueButton = app.buttons["Continue"]
         if !continueButton.isHittable { app.swipeUp() }
         continueButton.tap()
 
+        // Step 2: the avatar
+        XCTAssertTrue(app.staticTexts["Make your avatar"].waitForExistence(timeout: 15))
+        sleep(2)
+        snap("03-avatar-setup")
+        let flower = app.buttons["Flower"].firstMatch
+        if flower.waitForExistence(timeout: 5) { flower.tap() }
+        let purple = app.buttons["Color #EB8FFF"].firstMatch
+        if purple.exists { purple.tap() }
+        sleep(1)
+        snap("04-avatar-setup-picked")
+        app.buttons["Continue"].firstMatch.tap()
+
+        // Step 3: how to fill the profile
         XCTAssertTrue(app.staticTexts["How do you want to set up?"].waitForExistence(timeout: 15))
         sleep(2)
-        snap("03-setup-choice")
+        snap("05-setup-choice")
+        app.buttons["Skip for now"].firstMatch.tap()
+        sleep(2)
+
+        // The long name, laid out
+        app.tabBars.buttons["Profile"].tap()
+        sleep(2)
+        snap("06-profile-long-name")
+        app.tabBars.buttons["Badge"].tap()
+        let wear = app.buttons["Wear badge"].firstMatch
+        if wear.waitForExistence(timeout: 5) {
+            snap("07-badge-tab-long-name")
+            wear.tap()
+            sleep(2)
+            snap("08-worn-badge-long-name")
+        }
     }
 
     /// Signed in demo user: every tab, the sheets, Settings, then the worn badge.

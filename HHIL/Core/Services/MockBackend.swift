@@ -14,7 +14,23 @@ final class MockBackend: Backend {
     )
     private var profileWatchers: [UUID: AsyncThrowingStream<UserProfile?, Error>.Continuation] = [:]
 
-    func signIn(phone: String, name: String?, password: String?) async throws -> String { Self.demoUserId }
+    /// True: signing in makes a fresh account (the name typed, no avatar yet),
+    /// so the whole sign up flow can be walked on the mock.
+    private let newAccount: Bool
+
+    init(newAccount: Bool = false) {
+        self.newAccount = newAccount
+    }
+
+    func signIn(phone: String, name: String?, password: String?) async throws -> String {
+        if newAccount {
+            profile.phone = phone
+            profile.name = name
+            profile.avatarShape = nil
+            profile.avatarColor = nil
+        }
+        return Self.demoUserId
+    }
     func heartbeat(userId: String) async throws {}
 
     func me(userId: String) -> AsyncThrowingStream<UserProfile?, Error> {

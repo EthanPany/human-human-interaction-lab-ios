@@ -39,6 +39,30 @@ final class SessionStore {
 
     var isSignedIn: Bool { userId != nil }
 
+    // MARK: Avatar setup
+
+    /// Set once this account picked (or skipped) its avatar on this phone.
+    private var avatarSetupDone = false
+    private static func avatarSetupKey(_ id: String) -> String { "avatarSetupDone.\(id)" }
+
+    /// A new account picks its avatar as the first setup step. An account that
+    /// already has an avatar on the server, or skipped it here, isn't asked.
+    /// Nil until the profile has loaded.
+    var needsAvatarSetup: Bool? {
+        guard let profile else { return nil }
+        return profile.avatarShape?.nilIfBlank == nil && !avatarSetupDone
+    }
+
+    /// Save the avatar picked during setup. Nil shape and color mean skipped:
+    /// keep the default and don't ask again on this phone.
+    func finishAvatarSetup(shape: String?, color: String?) async {
+        if let userId { UserDefaults.standard.set(true, forKey: Self.avatarSetupKey(userId)) }
+        avatarSetupDone = true
+        if shape != nil || color != nil {
+            await update(ProfilePatch(avatarShape: shape, avatarColor: color))
+        }
+    }
+
     /// The phone number is the account. Password is optional.
     func signIn(phone: String, name: String?, password: String?) async {
         do {
@@ -62,6 +86,7 @@ final class SessionStore {
         momentsTask?.cancel()
         userId = nil
         profile = nil
+        avatarSetupDone = false
         moments = []
     }
 
@@ -106,6 +131,7 @@ final class SessionStore {
 
     private func didSignIn(_ id: String) {
         userId = id
+        avatarSetupDone = UserDefaults.standard.bool(forKey: Self.avatarSetupKey(id))
         profileTask?.cancel()
         profileTask = Task { [backend] in
             do {

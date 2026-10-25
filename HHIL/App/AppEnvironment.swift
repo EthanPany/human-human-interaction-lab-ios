@@ -34,7 +34,7 @@ final class AppEnvironment {
     static func live() -> AppEnvironment {
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("-uiTestSignedOut") {
-            return AppEnvironment(backend: MockBackend(), usingMock: true, start: .signedOut)
+            return AppEnvironment(backend: MockBackend(newAccount: true), usingMock: true, start: .signedOut)
         }
         if arguments.contains("-uiTestDemo") {
             return AppEnvironment(backend: MockBackend(), usingMock: true, start: .signedIn(MockBackend.demoUserId))
