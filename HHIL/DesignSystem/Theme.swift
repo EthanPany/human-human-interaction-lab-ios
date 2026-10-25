@@ -40,8 +40,8 @@ struct Theme {
     var screenPadding: CGFloat = 18
     /// Wide screens (iPad, the unfolded Duo, landscape) lay pages out in
     /// columns: two from this width, three from the next, never wider than the cap.
-    var twoColumnWidth: CGFloat = 700
-    var threeColumnWidth: CGFloat = 1100
+    var twoColumnWidth: CGFloat = 540
+    var threeColumnWidth: CGFloat = 1000
     var maxContentWidth: CGFloat = 1400
     /// Narrowest a card in a grid of people gets.
     var gridCardMinWidth: CGFloat = 300
