@@ -30,6 +30,9 @@ targets:
       path: HHIL/Info.plist
       properties:
         CFBundleDisplayName: HHIL
+        # From the build settings, so scripts/upload-testflight.sh can raise the build number
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
