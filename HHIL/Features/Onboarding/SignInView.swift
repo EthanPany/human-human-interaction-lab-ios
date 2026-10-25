@@ -35,7 +35,8 @@ struct SignInView: View {
                             .focused($focused, equals: .phone)
                         field("Name (optional)", text: $name, keyboard: .default, content: .givenName)
                             .focused($focused, equals: .name)
-                        SecureField("Password (optional)", text: $password)
+                        SecureField("Password (optional)", text: $password,
+                                    prompt: Text("Password (optional)").foregroundStyle(theme.inkSecondary))
                             .textContentType(.password)
                             .focused($focused, equals: .password)
                             .font(theme.body)
@@ -73,10 +74,11 @@ struct SignInView: View {
     }
 
     private func field(_ title: String, text: Binding<String>, keyboard: UIKeyboardType, content: UITextContentType) -> some View {
-        TextField(title, text: text)
+        TextField(title, text: text, prompt: Text(title).foregroundStyle(theme.inkSecondary))
             .keyboardType(keyboard)
             .textContentType(content)
             .font(theme.body)
+            .foregroundStyle(theme.strongInk)
             .padding(14)
             .background(theme.surfaceMuted, in: RoundedRectangle(cornerRadius: 14))
     }

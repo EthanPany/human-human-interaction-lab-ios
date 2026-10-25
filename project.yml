@@ -39,6 +39,8 @@ targets:
         NSMicrophoneUsageDescription: Records conversations so your agent can send you a summary.
         NSSpeechRecognitionUsageDescription: Transcribes conversations on your phone for your summary.
         LSApplicationQueriesSchemes: [sms]
+        # Light only (the design has no dark variant)
+        UIUserInterfaceStyle: Light
         # General Sans, fetched by scripts/fetch-fonts.sh (not in git, see the license)
         UIAppFonts:
           - GeneralSans-Regular.otf

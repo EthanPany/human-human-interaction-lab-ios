@@ -11,6 +11,9 @@ struct HHILApp: App {
                 .environment(env.motion)
                 .environment(\.theme, .playful) // swap the whole look here
                 .tint(Theme.playful.strongInk)
+                // The design is light only; in dark mode system placeholder
+                // text turns light grey and vanishes on the cream fields.
+                .preferredColorScheme(.light)
         }
     }
 }
