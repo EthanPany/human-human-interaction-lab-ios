@@ -31,18 +31,20 @@ struct SignInView: View {
                             .font(theme.body)
                             .foregroundStyle(theme.inkSecondary)
 
-                        LabeledField(title: "Phone number", hint: "(415) 555 0123", text: $phone,
-                                     footnote: "Your agent texts this number.")
-                            .keyboardType(.phonePad)
-                            .textContentType(.telephoneNumber)
-                            .focused($focused, equals: .phone)
-                        LabeledField(title: "Name", hint: "Optional, your agent can ask", text: $name)
+                        // Order matters for iOS autofill: the field right above the
+                        // password is treated as the account name, so that's the phone.
+                        LabeledField(title: "Name", hint: "e.g. Ethan Pan", text: $name)
                             .textContentType(.name)
                             .textInputAutocapitalization(.words)
                             .autocorrectionDisabled()
                             .submitLabel(.next)
                             .focused($focused, equals: .name)
-                            .onSubmit { focused = .password }
+                            .onSubmit { focused = .phone }
+                        LabeledField(title: "Phone number", hint: "(415) 555 0123", text: $phone,
+                                     footnote: phoneNote)
+                            .keyboardType(.phonePad)
+                            .textContentType(.telephoneNumber)
+                            .focused($focused, equals: .phone)
                         LabeledField(title: "Password", hint: "Optional, to sign in on another phone",
                                      text: $password, secure: true)
                             .textContentType(.password)
@@ -68,13 +70,13 @@ struct SignInView: View {
             }
             .scrollDismissesKeyboard(.interactively)
         }
-        .onAppear { focused = .phone }
+        .onAppear { focused = .name }
         .toolbar {
             // The phone pad has no Return key
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 if focused == .phone {
-                    Button("Next") { focused = .name }.fontWeight(.semibold)
+                    Button("Next") { focused = .password }.fontWeight(.semibold)
                 }
             }
         }
@@ -84,10 +86,21 @@ struct SignInView: View {
         busy = true
         focused = nil
         Task {
-            await env.session.signIn(phone: phone, name: name, password: password)
+            await env.session.signIn(phone: normalizedPhone ?? phone, name: name, password: password)
             busy = false
         }
     }
 
-    private var canSubmit: Bool { phone.filter(\.isNumber).count >= 10 && !busy }
+    private var normalizedPhone: String? { PhoneNumber.normalize(phone) }
+
+    private var canSubmit: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && normalizedPhone != nil && !busy
+    }
+
+    /// Confirms what we understood, whatever format autofill used.
+    private var phoneNote: String {
+        if let e164 = normalizedPhone { return "Your agent texts \(PhoneNumber.display(e164))" }
+        if phone.isEmpty { return "Your agent texts this number." }
+        return "Add the country code if it's not a US number."
+    }
 }
