@@ -28,10 +28,8 @@ enum PhoneNumber {
         if d.count == 11, d.first == "1" {
             return "+1 " + field(e164)
         }
-        // Country code, then the rest in groups of 3 and 4
-        let rest = String(d.dropFirst(d.count > 10 ? d.count - 10 : 2))
-        let cc = String(d.prefix(d.count - rest.count))
-        return "+\(cc) " + grouped(rest)
+        // Country code lengths vary (1 to 3 digits), so don't guess where it ends
+        return e164
     }
 
     /// What the phone field shows after editing: "(585) 210-6589" for US
@@ -42,16 +40,5 @@ enum PhoneNumber {
             return "(\(String(d[1...3]))) \(String(d[4...6]))-\(String(d[7...10]))"
         }
         return display(e164)
-    }
-
-    private static func grouped(_ digits: String) -> String {
-        let c = Array(digits)
-        guard c.count > 4 else { return digits }
-        var parts: [String] = []
-        var i = 0
-        let head = c.count % 4 == 0 ? 3 : c.count % 4 + (c.count % 4 < 3 ? 4 : 0)
-        parts.append(String(c[0..<min(head, c.count)])); i = min(head, c.count)
-        while i < c.count { parts.append(String(c[i..<min(i + 4, c.count)])); i += 4 }
-        return parts.joined(separator: " ")
     }
 }
