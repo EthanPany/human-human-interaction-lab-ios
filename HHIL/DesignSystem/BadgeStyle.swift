@@ -57,13 +57,18 @@ struct BadgeConfiguration {
 
     /// 0...1 how strongly the match color tints the badge: grows as they get closer.
     var tintStrength: Double {
-        guard mode != .idle, matchColor != nil else { return 0 }
+        guard pairColors != nil else { return 0 }
         return together ? 1 : max(0, min(1, closeness))
     }
 
-    /// My avatar's color after proximity tinting.
-    var avatarColor: Color {
-        AvatarTint.color(own: avatar.color, match: matchColor, closeness: mode == .idle ? 0 : closeness)
+    /// My avatar keeps its own color; proximity tints the badge around it instead.
+    var avatarColor: Color { avatar.color }
+
+    /// The two colors the badge blends as a match gets closer: mine and theirs
+    /// (or the shared match color when we don't know theirs). Nil when idle.
+    var pairColors: (mine: Color, theirs: Color)? {
+        guard mode != .idle, let theirs = peerAvatar?.color ?? matchColor else { return nil }
+        return (avatar.color, theirs)
     }
 
     var expression: AvatarExpression {

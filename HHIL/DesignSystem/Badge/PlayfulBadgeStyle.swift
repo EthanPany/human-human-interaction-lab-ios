@@ -29,7 +29,7 @@ private struct PlayfulBadge: View {
 
             ZStack {
                 FlowingBackground()
-                MatchWash(color: c.matchColor, strength: c.tintStrength)
+                PairWash(colors: c.pairColors, strength: c.tintStrength)
                 MatchGlow(color: c.matchColor, intensity: c.tintStrength)
 
                 if horizontal {
@@ -63,21 +63,58 @@ private struct PlayfulBadge: View {
     }
 }
 
-/// The shared match color laid over the whole background, stronger as they get closer.
-private struct MatchWash: View {
-    var color: Color?
+/// Both people's avatar colors flowing over the background as one slow
+/// current: bands of my color and theirs drift diagonally across the badge and
+/// bleed into each other. Faint when a match is first sensed, strong by 3 m.
+private struct PairWash: View {
+    var colors: (mine: Color, theirs: Color)?
     var strength: Double
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let range = theme.matchWashOpacity
-        let opacity = strength > 0 ? range.lowerBound + (range.upperBound - range.lowerBound) * strength : 0
-        Rectangle()
-            .fill(color ?? .clear)
-            .opacity(opacity)
-            .allowsHitTesting(false)
-            .animation(.easeInOut(duration: 0.8), value: opacity)
-            .ignoresSafeArea()
+        let opacity = colors != nil && strength > 0 ? range.lowerBound + (range.upperBound - range.lowerBound) * strength : 0
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || opacity == 0)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate * theme.pairWashSpeed
+            if let colors {
+                MeshGradient(width: 3, height: 3, points: Self.points(t), colors: Self.colors(t, colors),
+                             smoothsColors: true)
+            }
+        }
+        .opacity(opacity)
+        .animation(.easeInOut(duration: 0.8), value: opacity)
+        .allowsHitTesting(false)
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
+    }
+
+    /// The middle points sway a little so the bands breathe.
+    private static func points(_ t: Double) -> [SIMD2<Float>] {
+        var out: [SIMD2<Float>] = []
+        for row in 0..<3 {
+            for col in 0..<3 {
+                var x = Double(col) / 2, y = Double(row) / 2
+                if col == 1 { x += 0.12 * sin(t * 0.7 + Double(row) * 1.3) }
+                if row == 1 { y += 0.12 * cos(t * 0.6 + Double(col) * 1.1) }
+                out.append(SIMD2(Float(x), Float(y)))
+            }
+        }
+        return out
+    }
+
+    /// One direction for the whole badge: a wave of mine to theirs travelling
+    /// from the top left corner to the bottom right.
+    private static func colors(_ t: Double, _ c: (mine: Color, theirs: Color)) -> [Color] {
+        var out: [Color] = []
+        for row in 0..<3 {
+            for col in 0..<3 {
+                let phase = Double(row + col) * 1.05 - t
+                let mix = 0.5 + 0.5 * sin(phase)
+                out.append(c.mine.mix(with: c.theirs, by: mix))
+            }
+        }
+        return out
     }
 }
 

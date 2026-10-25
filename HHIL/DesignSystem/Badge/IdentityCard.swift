@@ -51,10 +51,11 @@ struct IdentityCard: View {
             .background(surface)
     }
 
-    /// The card takes on a little of the match color as they get closer.
+    /// The card takes on a little of both people's colors as they get closer.
     private var surface: Color {
-        guard let tint = c.matchColor, c.tintStrength > 0 else { return theme.surface }
-        return theme.surface.mix(with: tint, by: theme.matchCardTint * c.tintStrength)
+        guard let pair = c.pairColors, c.tintStrength > 0 else { return theme.surface }
+        let blend = pair.mine.mix(with: pair.theirs, by: 0.5)
+        return theme.surface.mix(with: blend, by: theme.matchCardTint * c.tintStrength)
     }
 
     private var photoBeside: some View {
@@ -134,7 +135,7 @@ struct IdentityCard: View {
             hasMet: c.hasMet,
             peerSide: (c.look?.x ?? 1) < 0 ? -1 : 1,
             meetCount: c.meetCount,
-            rippleColor: c.matchColor ?? c.avatarColor
+            rippleColor: c.pairColors.map { $0.mine.mix(with: $0.theirs, by: 0.5) } ?? c.avatarColor
         )
         // The wearer's own idle avatar feels the phone move (walking, shakes, stillness)
         .avatarSensesMotion(c.followsTilt)
