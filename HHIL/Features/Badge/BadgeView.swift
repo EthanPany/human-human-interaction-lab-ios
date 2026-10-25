@@ -38,7 +38,7 @@ struct BadgeView: View {
             keywords: Self.keywords(active: active, state: state, tags: tags, hobbies: profile?.hobbies ?? []),
             frontTag: front,
             mode: state.mode,
-            closeness: state.closeness,
+            closeness: Self.closeness(state: state, localMeters: state.peerId.flatMap { env.nearby.diagnostics[$0]?.meters }),
             matchColor: active ? state.color.map(Color.init(hex:)) : nil,
             peerAvatar: state.peerAvatar,
             peerSeed: AvatarStyle.seed(state.peerId ?? ""),
@@ -47,6 +47,14 @@ struct BadgeView: View {
             presentation: presentation,
             orientation: orientation
         )
+    }
+
+    /// The server decides who the match is; how close they are comes straight
+    /// from this phone's UWB reading when it has one (no round trip), on the
+    /// same scale as the server: shows from 10 m, full strength at 3 m.
+    private static func closeness(state: BadgeState, localMeters: Double?) -> Double {
+        guard state.mode == .match, let m = localMeters else { return state.closeness }
+        return max(0, min(1, (10 - m) / (10 - 3)))
     }
 
     /// Match topics from the backend while someone is near, else my own tags

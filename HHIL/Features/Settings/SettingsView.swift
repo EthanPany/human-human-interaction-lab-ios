@@ -42,6 +42,8 @@ struct SettingsView: View {
                 Text("Soft sounds and taps when you touch your avatar and when a match comes close. The silent switch also mutes the sounds.")
             }
 
+            NearbySection()
+
             Section {
                 Picker("Backend", selection: $provider) {
                     ForEach(BackendProvider.allCases) { Text($0.displayName).tag($0) }
@@ -86,5 +88,52 @@ struct SettingsView: View {
                 }
             }
         )
+    }
+}
+
+/// Live view of Ultra Wideband ranging, for testing two phones side by side.
+private struct NearbySection: View {
+    @Environment(AppEnvironment.self) private var env
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        let nearby = env.nearby
+        Section {
+            LabeledContent("Status", value: nearby.status.label)
+            LabeledContent("Range", value: nearby.extendedRange ? "Extended UWB" : "Standard UWB")
+            if nearby.diagnostics.isEmpty {
+                Text("No other phones with the app open right now. Open the app on the other phone, signed in as a different person.")
+                    .font(theme.caption)
+                    .foregroundStyle(theme.inkSecondary)
+            }
+            ForEach(nearby.diagnostics.values.sorted { $0.name < $1.name }) { peer in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(peer.name.isEmpty ? "Someone" : peer.name).font(theme.body.weight(.semibold))
+                        Spacer()
+                        if let m = peer.meters {
+                            Text(String(format: "%.2f m", m)).font(theme.body.monospacedDigit())
+                        } else {
+                            Text("no distance yet").font(theme.caption).foregroundStyle(theme.inkSecondary)
+                        }
+                    }
+                    Text(detail(peer)).font(theme.caption).foregroundStyle(theme.inkSecondary)
+                }
+            }
+            Button("Restart ranging") { nearby.reset() }
+        } header: {
+            Text("Nearby (UWB)")
+        } footer: {
+            Text("A match starts to show within 10 m and is at full strength within 3 m. Both phones need the app open and must be signed in as different people.")
+        }
+    }
+
+    private func detail(_ p: NearbyService.PeerDiagnostics) -> String {
+        var parts: [String] = []
+        parts.append(p.tokenSent ? "token sent" : "no token sent")
+        parts.append(p.running ? "ranging" : "waiting for their token")
+        if let at = p.updatedAt { parts.append("updated \(Int(Date().timeIntervalSince(at)))s ago") }
+        if let e = p.lastError { parts.append(e) }
+        return parts.joined(separator: " · ")
     }
 }
