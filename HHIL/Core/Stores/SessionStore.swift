@@ -139,6 +139,7 @@ final class SessionStore {
                     // The account is gone (database reset, other deployment): start over.
                     guard let p else { self.signOut(); return }
                     self.profile = p
+                    AppConfig.assignedAgentLine = p.agentLine
                 }
             } catch {
                 // An id from another deployment fails argument validation: start

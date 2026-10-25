@@ -47,12 +47,16 @@ enum AppConfig {
     /// to the line in the Photon dashboard, then their texts arrive as blue
     /// bubbles. AGENT_PHONE in Secrets.xcconfig overrides it.
     static let photonLine = "+16289988199"
-    static var agentPhone: String? {
-        plistValue("AgentPhone").flatMap { $0.contains("5555550123") ? nil : $0 } ?? photonLine
+    /// Set from the signed in profile: the line Photon assigned to this person.
+    @MainActor static var assignedAgentLine: String?
+
+    @MainActor static var agentPhone: String? {
+        if let line = assignedAgentLine, !line.isEmpty { return line }
+        return plistValue("AgentPhone").flatMap { $0.contains("5555550123") ? nil : $0 } ?? photonLine
     }
 
     /// Opens Messages with the agent, optionally with a first message.
-    static func agentSMSURL(body: String? = nil) -> URL? {
+    @MainActor static func agentSMSURL(body: String? = nil) -> URL? {
         guard let phone = agentPhone else { return nil }
         var components = URLComponents()
         components.scheme = "sms"

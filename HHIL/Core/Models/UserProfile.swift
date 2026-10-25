@@ -23,12 +23,16 @@ struct UserProfile: Decodable, Identifiable {
     var avatarColor: String?
     var badgeLayout: String?
     var photoUrl: String?
+    /// This person's Photon iMessage line (assigned at sign up).
+    var agentLine: String? = nil
+    /// False until they've texted the agent once (a shared line can't text first).
+    var agentConnected: Bool? = nil
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
         case phone, name, headline, company, location, tags, lookingFor, offers, hobbies, appearance
         case californiaMode, recordConversations, hasPassword
-        case avatarShape, avatarColor, badgeLayout, photoUrl
+        case avatarShape, avatarColor, badgeLayout, photoUrl, agentLine, agentConnected
     }
 
     var displayName: String { name?.isEmpty == false ? name! : "Your name" }
