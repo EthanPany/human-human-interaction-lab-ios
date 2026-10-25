@@ -1,0 +1,47 @@
+# Generate the Xcode project:  brew install xcodegen && xcodegen
+# Re-run after adding or removing files. HHIL.xcodeproj is generated, not edited by hand.
+name: HHIL
+options:
+  bundleIdPrefix: com.ethanpany
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/App.xcconfig
+  Release: Config/App.xcconfig
+packages:
+  ConvexMobile:
+    url: https://github.com/get-convex/convex-swift
+    from: 0.7.0
+targets:
+  HHIL:
+    type: application
+    platform: iOS
+    sources:
+      - path: HHIL
+    dependencies:
+      - package: ConvexMobile
+    info:
+      path: HHIL/Info.plist
+      properties:
+        CFBundleDisplayName: HHIL
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSNearbyInteractionUsageDescription: Your badge lights up when someone you should meet is close by.
+        NSMicrophoneUsageDescription: Records conversations so your agent can send you a summary.
+        NSSpeechRecognitionUsageDescription: Transcribes conversations on your phone for your summary.
+        LSApplicationQueriesSchemes: [sms]
+        ConvexURL: $(CONVEX_URL)
+        AgentPhone: $(AGENT_PHONE)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ethanpany.hhil
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"

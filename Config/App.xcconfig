@@ -1,0 +1,3 @@
+// Shared build settings. Your machine specific values live in Secrets.xcconfig (not committed).
+// Copy Secrets.example.xcconfig to Secrets.xcconfig and fill it in.
+#include? "Secrets.xcconfig"
