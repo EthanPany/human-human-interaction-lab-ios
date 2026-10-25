@@ -32,11 +32,17 @@ struct IdentityCard: View {
 
     private var avatarCard: some View {
         GeometryReader { geo in
+            // Alone, the avatar peeks big from the top right. Once we meet, the
+            // stage moves to the middle and shrinks to the card's width so both
+            // avatars land inside the card instead of the peer being cut off.
+            let side = c.hasMet ? min(geo.size.height * 1.05, geo.size.width * 0.85) : geo.size.height * 1.05
+            let x = c.hasMet ? geo.size.width / 2 : geo.size.width - geo.size.height * 0.42
             ZStack(alignment: .bottomLeading) {
                 theme.surface
                 stage
-                    .frame(width: geo.size.height * 1.05, height: geo.size.height * 1.05)
-                    .position(x: geo.size.width - geo.size.height * 0.42, y: geo.size.height * 0.38)
+                    .frame(width: side, height: side)
+                    .position(x: x, y: geo.size.height * 0.38)
+                    .animation(.spring(response: 0.7, dampingFraction: 0.62), value: c.hasMet)
                 details(nameFont: .brandFixed(nameSize, .semibold), ink: theme.strongInk, lines: 1)
                     .padding(18 * scale)
             }
