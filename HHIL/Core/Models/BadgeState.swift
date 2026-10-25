@@ -11,6 +11,8 @@ struct BadgeState: Decodable {
     @ConvexFloat var glow: Double
     var color: String?
     var frontTag: String?
+    /// 1 to 3 short topics printed big under my name (see backend badge.ts).
+    var keywords: [String]?
     var peerId: String?
     var peerName: String?
     var peerAvatarShape: String?
@@ -32,11 +34,12 @@ struct BadgeState: Decodable {
 
     init(mode: BadgeMode, glow: Double, color: String?, frontTag: String?, peerId: String?,
          peerName: String?, peerAvatarShape: String?, peerAvatarColor: String?, closeness: Double,
-         conversationId: String?, recordConversations: Bool, californiaMode: Bool) {
+         conversationId: String?, recordConversations: Bool, californiaMode: Bool, keywords: [String]? = nil) {
         self.mode = mode
         self._glow = ConvexFloat(wrappedValue: glow)
         self.color = color
         self.frontTag = frontTag
+        self.keywords = keywords
         self.peerId = peerId
         self.peerName = peerName
         self.peerAvatarShape = peerAvatarShape

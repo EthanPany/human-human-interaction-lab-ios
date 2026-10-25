@@ -23,6 +23,11 @@ struct BadgeConfiguration {
     var tags: [String]
     var moments: [Moment]
 
+    /// The big topics under the name: 1 to 3 phrases of 1 to 5 words.
+    /// With a match near, what I have that they want to discuss or what we
+    /// both want to; otherwise my own top tags.
+    var keywords: [String] = []
+
     // What is happening
     /// The tag the nearby match cares about most. Nil when nobody is close.
     var frontTag: String?
@@ -52,14 +57,6 @@ struct BadgeConfiguration {
 
     var expression: AvatarExpression {
         AvatarTint.expression(mode: mode, closeness: closeness, hasProfile: hasProfile)
-    }
-
-    /// Lines the dynamic title cycles through when nobody is near.
-    var titleRotation: [String] {
-        var lines: [String] = []
-        if let role { lines.append(role) }
-        lines += tags.filter { $0 != role }
-        return lines
     }
 
     /// Items ordered for display: front item first.

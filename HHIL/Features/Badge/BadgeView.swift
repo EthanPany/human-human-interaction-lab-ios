@@ -35,6 +35,7 @@ struct BadgeView: View {
             interests: BadgeConfiguration.ordered(interests, front: front),
             tags: tags,
             moments: env.session.moments,
+            keywords: Self.keywords(active: active, state: state, tags: tags, hobbies: profile?.hobbies ?? []),
             frontTag: front,
             mode: state.mode,
             closeness: state.closeness,
@@ -48,4 +49,11 @@ struct BadgeView: View {
         )
     }
 
+    /// Match topics from the backend while someone is near, else my own tags
+    /// (read locally so profile edits show at once).
+    private static func keywords(active: Bool, state: BadgeState, tags: [String], hobbies: [String]) -> [String] {
+        if active, let k = state.keywords, !k.isEmpty { return Array(k.prefix(3)) }
+        if active, let front = state.frontTag { return [front] }
+        return Array((tags.isEmpty ? hobbies : tags).prefix(3))
+    }
 }

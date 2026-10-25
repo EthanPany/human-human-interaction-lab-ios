@@ -63,7 +63,8 @@ final class MockBackend: Backend {
                             frontTag: mode == .idle ? nil : "Product designer",
                             peerId: mode == .idle ? nil : "p1", peerName: mode == .idle ? nil : "Maya",
                             peerAvatarShape: "blob", peerAvatarColor: "#3BB52D", closeness: closeness,
-                            conversationId: nil, recordConversations: true, californiaMode: true
+                            conversationId: nil, recordConversations: true, californiaMode: true,
+                            keywords: mode == .idle ? nil : ["Agent design", "iOS engineers", "Film photos"]
                         ))
                         try? await Task.sleep(for: .seconds(4))
                     }
