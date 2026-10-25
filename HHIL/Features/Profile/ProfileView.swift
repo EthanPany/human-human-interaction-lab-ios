@@ -55,7 +55,8 @@ struct ProfileView: View {
     // MARK: Blocks
 
     private var topBar: some View {
-        HStack(spacing: 12) {
+        let uploading = env.session.isUploading
+        return HStack(spacing: 12) {
             AvatarView(shape: env.session.profile?.avatar.shape ?? .blob,
                        color: env.session.profile?.avatar.color ?? theme.red,
                        animated: false, seed: 1)
@@ -63,7 +64,7 @@ struct ProfileView: View {
             Spacer()
             RegionPill()
             PhotosPicker(selection: $newMoment, matching: .images) {
-                IconButtonLabel(systemImage: env.session.isUploading ? "hourglass" : "plus")
+                IconButtonLabel(systemImage: uploading ? "hourglass" : "plus")
             }
             .accessibilityLabel("Add a photo")
             IconButton(systemImage: "slider.horizontal.3", label: "Settings") { showSettings = true }

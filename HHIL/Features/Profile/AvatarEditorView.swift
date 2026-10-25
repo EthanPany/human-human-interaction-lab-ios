@@ -134,7 +134,9 @@ struct AvatarEditorView: View {
     }
 
     private var photo: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let uploading = env.session.isUploading
+        let hasPhoto = env.session.profile?.photoURL != nil
+        return VStack(alignment: .leading, spacing: 12) {
             SectionLabel(text: "Photo")
             HStack(spacing: 12) {
                 if let url = env.session.profile?.photoURL {
@@ -143,7 +145,7 @@ struct AvatarEditorView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 PhotosPicker(selection: $photoItem, matching: .images) {
-                    Text(env.session.isUploading ? "Uploading…" : env.session.profile?.photoURL == nil ? "Choose photo" : "Change photo")
+                    Text(uploading ? "Uploading…" : hasPhoto ? "Change photo" : "Choose photo")
                 }
                 .buttonStyle(SecondaryButtonStyle())
                 if env.session.profile?.photoURL != nil {
