@@ -1,7 +1,7 @@
 import Foundation
 import ConvexMobile
 
-/// A row in the People list.
+/// A row in the People list: someone I saved, or met in person.
 struct PersonSummary: Decodable, Identifiable, Hashable {
     let id: String
     var name: String?
@@ -12,14 +12,22 @@ struct PersonSummary: Decodable, Identifiable, Hashable {
     var avatarShape: String?
     var avatarColor: String?
     var photoUrl: String?
+    /// When they joined my list (saved, or first met).
     @ConvexFloat var connectedAt: Double
     var lastSummary: String?
+    /// False for people I met but haven't saved yet (nil from older servers).
+    var saved: Bool? = nil
 
     var displayName: String { name ?? "Someone" }
     var avatar: AvatarStyle { AvatarStyle(shape: avatarShape, color: avatarColor) }
     var connectedDate: Date { Date(timeIntervalSince1970: connectedAt / 1000) }
 
-    static func == (l: PersonSummary, r: PersonSummary) -> Bool { l.id == r.id }
+    /// Same person with the same visible details (so a row redraws when its summary lands).
+    static func == (l: PersonSummary, r: PersonSummary) -> Bool {
+        l.id == r.id && l.name == r.name && l.headline == r.headline && l.company == r.company
+            && l.tags == r.tags && l.lastSummary == r.lastSummary && l.saved == r.saved
+            && l.connectedAt == r.connectedAt && l.avatarShape == r.avatarShape && l.avatarColor == r.avatarColor
+    }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
@@ -48,6 +56,7 @@ struct ConversationInfo: Decodable {
     var followUp: String?
 
     var startedDate: Date { Date(timeIntervalSince1970: startedAt / 1000) }
+    var isOngoing: Bool { endedAt == nil }
 }
 
 struct TimelineItem: Decodable, Identifiable {
@@ -65,6 +74,8 @@ struct PersonDetail: Decodable {
     @OptionalConvexFloat var connectedAt: Double?
     var conversation: ConversationInfo?
     var timeline: [TimelineItem]
+    /// False when we met but I haven't saved their contact yet.
+    var saved: Bool? = nil
 }
 
 /// Another phone at the event, with the Nearby Interaction token it made for us.

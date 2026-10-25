@@ -66,9 +66,20 @@ struct PersonDetailView: View {
     private func summary(_ c: ConversationInfo?) -> some View {
         Card {
             SectionLabel(text: "Summary")
-            Text(c?.summary ?? "Your summary appears here after you talk.")
-                .font(theme.body)
-                .foregroundStyle(c?.summary == nil ? theme.inkSecondary : theme.ink)
+            if let text = c?.summary?.nilIfBlank {
+                Text(text).font(theme.body).foregroundStyle(theme.ink)
+            } else if let c, c.isOngoing {
+                Text("You're talking now. Your summary appears here after you part ways.")
+                    .font(theme.body).foregroundStyle(theme.inkSecondary)
+            } else if c != nil {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Writing your summary").font(theme.body).foregroundStyle(theme.inkSecondary)
+                }
+            } else {
+                Text("Your summary appears here after you talk.")
+                    .font(theme.body).foregroundStyle(theme.inkSecondary)
+            }
             if let topics = c?.topics, !topics.isEmpty {
                 FlowLayout(spacing: 6) {
                     ForEach(topics, id: \.self) { TagChip(text: $0, systemImage: nil, size: 13) }

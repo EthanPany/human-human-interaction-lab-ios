@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// People you saved (connected only), newest first. Updates live.
+/// People you met in person or saved, newest first. Updates live: someone
+/// shows up the moment you meet, before anything else is known about them.
 struct PeopleListView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.theme) private var theme
@@ -20,7 +21,7 @@ struct PeopleListView: View {
                     ContentUnavailableView(
                         "No one yet",
                         systemImage: "person.2",
-                        description: Text("People you meet and save by text show up here.")
+                        description: Text("People you meet show up here, with a summary after you talk.")
                     )
                 }
             }
@@ -91,6 +92,13 @@ private struct PersonRow: View {
                 Text(person.displayName).font(theme.headline)
                 if let line = [person.headline, person.company].compactMap({ $0?.nilIfBlank }).joined(separator: " · ").nilIfBlank {
                     Text(line).font(theme.caption).foregroundStyle(theme.inkSecondary).lineLimit(1)
+                } else if let tags = person.tags.prefix(3).joined(separator: " · ").nilIfBlank {
+                    Text(tags).font(theme.caption).foregroundStyle(theme.inkSecondary).lineLimit(1)
+                }
+                if let summary = person.lastSummary?.nilIfBlank {
+                    Text(summary).font(theme.caption).foregroundStyle(theme.ink).lineLimit(2)
+                } else if person.saved == false {
+                    Text("Met in person").font(theme.caption).foregroundStyle(theme.inkSecondary)
                 }
             }
             Spacer()
