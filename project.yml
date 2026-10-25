@@ -53,3 +53,8 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"
+        # iPhone Duo hinge API (Platform/Fold.swift) exists from the iOS 27 SDK on
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphoneos27*]": $(inherited) HINGE_API
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphonesimulator27*]": $(inherited) HINGE_API
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphoneos28*]": $(inherited) HINGE_API
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphonesimulator28*]": $(inherited) HINGE_API
