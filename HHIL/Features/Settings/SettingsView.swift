@@ -22,7 +22,7 @@ struct SettingsView: View {
                 Toggle("Record conversations", isOn: binding(\.recordConversations, default: true) {
                     ProfilePatch(recordConversations: $0)
                 })
-                Toggle("California mode", isOn: binding(\.californiaMode, default: true) {
+                Toggle("California mode", isOn: binding(\.californiaMode, default: false) {
                     ProfilePatch(californiaMode: $0)
                 })
             } header: {
