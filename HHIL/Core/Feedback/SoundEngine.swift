@@ -95,10 +95,12 @@ final class SoundEngine {
 
     private func ensureRunning() -> Bool {
         let session = AVAudioSession.sharedInstance()
-        // While a conversation is being recorded the session belongs to the
-        // recorder; stay quiet so cues don't end up in the transcript.
-        if session.category == .playAndRecord { return false }
-        if !sessionReady || session.category != .ambient {
+        // While a conversation is being recorded the recorder owns the session
+        // (play and record, to the speaker). Play on it as it is: changing the
+        // category here would cut the recording, and staying silent made every
+        // cue vanish for the whole conversation.
+        let recording = session.category == .playAndRecord
+        if !recording, !sessionReady || session.category != .ambient {
             do {
                 try session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
                 try session.setActive(true)

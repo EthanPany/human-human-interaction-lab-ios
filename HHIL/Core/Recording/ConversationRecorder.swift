@@ -42,7 +42,9 @@ final class ConversationRecorder: @unchecked Sendable {
         guard !Task.isCancelled else { return }
         do {
             let audio = AVAudioSession.sharedInstance()
-            try audio.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker])
+            // .default, not .measurement: measurement mode turns the speaker way down, so cues
+            // during a conversation were close to silent.
+            try audio.setCategory(.playAndRecord, mode: .default, options: [.duckOthers, .defaultToSpeaker])
             try audio.setActive(true, options: .notifyOthersOnDeactivation)
 
             lock.withLock {
