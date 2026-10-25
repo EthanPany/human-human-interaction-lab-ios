@@ -49,10 +49,11 @@ final class BadgeStore {
     private var lastTogether = Date.distantPast
     private var lastMeetAt = Date.distantPast
 
-    /// Same as TALK_DISTANCE_M in backend/convex/lib/constants.ts.
-    static let meetDistance = 1.5
-    /// Further than this, we have parted (the avatars separate again).
-    static let apartDistance = 3.0
+    /// Same as TALK_DISTANCE_M in backend/convex/lib/constants.ts. Checked on
+    /// every local UWB reading, so the moment fires without waiting for the server.
+    static let meetDistance = 3.0
+    /// Further than this, we have parted (same as TALK_EXIT_DISTANCE_M).
+    static let apartDistance = 4.5
     /// Apart at least this long before meeting the same person counts again.
     static let meetAgainAfter: TimeInterval = 20
     /// Out of the talking state this long before the conversation really ends.
