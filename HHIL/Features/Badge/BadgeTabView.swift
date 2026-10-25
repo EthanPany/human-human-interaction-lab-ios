@@ -6,6 +6,8 @@ struct BadgeTabView: View {
     @Environment(\.theme) private var theme
     @Namespace private var namespace
     @GestureState private var pinch: CGFloat = 1
+    /// Upward drag on the preview (negative = up); it lifts and grows with the finger.
+    @GestureState private var lift: CGFloat = 0
 
     var body: some View {
         @Bindable var badge = env.badge
@@ -31,12 +33,28 @@ struct BadgeTabView: View {
                     .clipShape(RoundedRectangle(cornerRadius: theme.badgeCornerRadius))
                     .overlay(RoundedRectangle(cornerRadius: theme.badgeCornerRadius).stroke(.white, lineWidth: 6))
                     .shadow(color: .black.opacity(0.14), radius: 20, y: 10)
-                    .scaleEffect(min(max(pinch, 0.95), 1.15))
+                    .scaleEffect(min(max(pinch, 0.95), 1.15) * (1 + min(0.12, -lift / 900)))
+                    .offset(y: lift * 0.35)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.7), value: lift)
                     .matchedTransitionSource(id: "badge", in: namespace)
+                    // Two ways in: pinch out, or swipe up. Swipe down in the
+                    // worn badge (or pinch in) takes it off again.
                     .gesture(
                         MagnifyGesture()
                             .updating($pinch) { value, state, _ in state = value.magnification }
                             .onEnded { value in if value.magnification > 1.15 { env.badge.wear() } }
+                    )
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 12)
+                            .updating($lift) { value, state, _ in
+                                let dy = value.translation.height
+                                state = dy < 0 ? dy : dy / 6 // resist downward pulls
+                            }
+                            .onEnded { value in
+                                if value.translation.height < -70 || value.predictedEndTranslation.height < -220 {
+                                    env.badge.wear()
+                                }
+                            }
                     )
                     .accessibilityAction(named: "Wear badge") { env.badge.wear() }
 
@@ -64,7 +82,7 @@ struct BadgeTabView: View {
         let state = env.badge.state
         let name = state.peerName ?? "Someone"
         switch state.mode {
-        case .idle: return "Pinch out to wear it. Your badge reacts when someone you should meet comes close."
+        case .idle: return "Swipe up or pinch out to wear it. Your badge reacts when someone you should meet comes close."
         case .match: return "\(name) is nearby. Your avatar is taking on your shared color."
         case .talking: return "You're talking with \(name)."
         case .connected: return "\(name) is in your People. Say hi again!"
