@@ -117,7 +117,7 @@ struct ProfileView: View {
 
     private var agentBlock: some View {
         Card {
-            Text("Your agent").font(theme.headline)
+            SectionHeader(title: "Your agent")
             Text("Text it anything: who you want to meet, how a chat went, or to update your profile.")
                 .font(theme.body).foregroundStyle(theme.inkSecondary)
             if let url = AppConfig.agentSMSURL(body: "Hi!") {
@@ -131,7 +131,7 @@ struct ProfileView: View {
 
     private func fact(_ title: String, _ value: String?) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(theme.caption.weight(.semibold)).foregroundStyle(theme.ink.opacity(0.7))
+            FieldLabel(text: title)
             Text(value?.nilIfBlank ?? "Not set yet")
                 .font(theme.body)
                 .foregroundStyle(value?.nilIfBlank == nil ? theme.inkSecondary : theme.ink)
@@ -215,8 +215,7 @@ private struct RegionPill: View {
                     .background(theme.yellowStrong, in: RoundedRectangle(cornerRadius: 8))
             }
             .padding(5)
-            .background(theme.surfaceMuted, in: RoundedRectangle(cornerRadius: 8))
-            .shadow(color: .black.opacity(0.25), radius: 1, y: 4)
+            .background(RaisedFill(shape: RoundedRectangle(cornerRadius: 8), fill: theme.surfaceMuted))
         }
         .accessibilityLabel("Recording region, \(california ? "California" : "elsewhere")")
     }

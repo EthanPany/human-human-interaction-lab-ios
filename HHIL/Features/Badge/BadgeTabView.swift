@@ -9,6 +9,9 @@ struct BadgeTabView: View {
     /// Upward drag on the preview (negative = up); it lifts and grows with the finger.
     @GestureState private var lift: CGFloat = 0
 
+    private static let pinchToWear: CGFloat = 1.15
+    private static let liftToWear: CGFloat = -70
+
     var body: some View {
         @Bindable var badge = env.badge
         GeometryReader { geo in
@@ -38,24 +41,31 @@ struct BadgeTabView: View {
                     .animation(.spring(response: 0.35, dampingFraction: 0.7), value: lift)
                     .matchedTransitionSource(id: "badge", in: namespace)
                     // Two ways in: pinch out, or swipe up. Swipe down in the
-                    // worn badge (or pinch in) takes it off again.
+                    // worn badge (or pinch in) takes it off again. One combined
+                    // gesture (not simultaneous with the children), so dragging
+                    // the avatar squishes it instead of wearing the badge.
                     .gesture(
                         MagnifyGesture()
                             .updating($pinch) { value, state, _ in state = value.magnification }
-                            .onEnded { value in if value.magnification > 1.15 { env.badge.wear() } }
+                            .onEnded { value in if value.magnification > Self.pinchToWear { env.badge.wear() } }
+                            .simultaneously(with:
+                                DragGesture(minimumDistance: 12)
+                                    .updating($lift) { value, state, _ in
+                                        let dy = value.translation.height
+                                        state = dy < 0 ? dy : dy / 6 // resist downward pulls
+                                    }
+                                    .onEnded { value in
+                                        if value.translation.height < Self.liftToWear
+                                            || value.predictedEndTranslation.height < -220 {
+                                            env.badge.wear()
+                                        }
+                                    }
+                            )
                     )
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 12)
-                            .updating($lift) { value, state, _ in
-                                let dy = value.translation.height
-                                state = dy < 0 ? dy : dy / 6 // resist downward pulls
-                            }
-                            .onEnded { value in
-                                if value.translation.height < -70 || value.predictedEndTranslation.height < -220 {
-                                    env.badge.wear()
-                                }
-                            }
-                    )
+                    // A tick when letting go would wear it
+                    .onChange(of: pinch > Self.pinchToWear || lift < Self.liftToWear) { _, armed in
+                        if armed { Feedback.shared.play(.detent) }
+                    }
                     .accessibilityAction(named: "Wear badge") { env.badge.wear() }
 
                 Text(statusLine)
@@ -72,6 +82,8 @@ struct BadgeTabView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(theme.background)
+        .onAppear { env.badge.isPreviewVisible = true }
+        .onDisappear { env.badge.isPreviewVisible = false }
         .fullScreenCover(isPresented: $badge.isWorn) {
             WornBadgeView()
                 .navigationTransition(.zoom(sourceID: "badge", in: namespace))

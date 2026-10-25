@@ -13,6 +13,7 @@ enum AvatarExpression: String, CaseIterable {
     case excited   // the match is getting close
     case happy     // talking
     case love      // saved each other
+    case held      // being touched: big eyes on the finger, a little blush, no hopping
 
     var face: FaceParams {
         switch self {
@@ -22,6 +23,7 @@ enum AvatarExpression: String, CaseIterable {
         case .excited: return FaceParams(eyeOpen: 1.05, eyeScale: 1.25, crescent: 0, bounce: 0.07, bounceSpeed: 5.5, tilt: 0.04, lookBias: 1)
         case .happy: return FaceParams(eyeOpen: 1, eyeScale: 1.05, crescent: 1, bounce: 0.04, bounceSpeed: 3.2, blush: 0.35, lookBias: 0.6)
         case .love: return FaceParams(eyeOpen: 1, eyeScale: 1.1, crescent: 1, bounce: 0.05, bounceSpeed: 3.8, blush: 1, lookBias: 0.4)
+        case .held: return FaceParams(eyeOpen: 1.08, eyeScale: 1.22, crescent: 0, bounce: 0.004, bounceSpeed: 2, blush: 0.3, tilt: 0.06, lookBias: 1)
         }
     }
 }

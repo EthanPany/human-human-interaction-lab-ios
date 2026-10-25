@@ -20,12 +20,19 @@ struct AvatarStage: View {
 
     // Touch: drag to squish and lean it, tap to make it hop.
     @State private var drag: CGSize = .zero
+    /// Where the finger is relative to the avatar, -1...1 (the eyes follow it).
+    @State private var finger: CGPoint?
     @State private var touching = false
     @State private var boops = 0
     @State private var delighted = false
+    @State private var delightTask: Task<Void, Never>?
+    /// Per touch bookkeeping that should not re-render the view.
+    @State private var tracker = TouchTracker()
+
+    private static let space = "avatarStage"
 
     private var myLook: CGPoint? {
-        if touching { return CGPoint(x: drag.width / 60, y: drag.height / 60).clamped }
+        if touching, let finger { return finger }
         if hasMet { return CGPoint(x: peerSide, y: 0) }
         if let look { return look }
         return followsTilt ? CGPoint(x: motion.tiltX, y: motion.tiltY * 0.6) : nil
@@ -34,17 +41,19 @@ struct AvatarStage: View {
     var body: some View {
         GeometryReader { geo in
             let size = min(geo.size.width, geo.size.height)
+            let mySize = hasMet ? size * 0.72 : size
+            let home = CGPoint(x: geo.size.width / 2 + (hasMet ? -peerSide * size * 0.2 : 0),
+                               y: geo.size.height / 2 + (hasMet ? size * 0.12 : 0))
             ZStack {
-                let mySize = hasMet ? size * 0.72 : size
                 AvatarView(
                     shape: avatar.shape,
                     color: color,
-                    expression: touching ? .excited : delighted ? .happy : expression,
+                    expression: touching ? .held : delighted ? .happy : expression,
                     look: myLook,
                     seed: seed
                 )
                 .frame(width: mySize, height: mySize)
-                .modifier(Squish(drag: drag, pressed: touching, size: mySize))
+                .modifier(Squish(drag: drag, press: touching ? 1 : 0, size: mySize))
                 .keyframeAnimator(initialValue: Hop(), trigger: boops) { content, hop in
                     content
                         .scaleEffect(x: 2 - hop.squash, y: hop.squash, anchor: .bottom)
@@ -64,9 +73,7 @@ struct AvatarStage: View {
                     }
                 }
                 .contentShape(Circle().scale(0.8))
-                .gesture(touch(size: mySize))
-                .sensoryFeedback(.impact(weight: .light, intensity: 0.7), trigger: boops)
-                .sensoryFeedback(.selection, trigger: touching) { _, new in new }
+                .gesture(touch(size: mySize, home: home))
                 .offset(x: hasMet ? -peerSide * size * 0.2 : 0, y: hasMet ? size * 0.12 : 0)
 
                 if hasMet, let peer {
@@ -83,32 +90,89 @@ struct AvatarStage: View {
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            .coordinateSpace(.named(Self.space))
             .animation(.spring(response: 0.7, dampingFraction: 0.62), value: hasMet)
         }
     }
 }
 
 extension AvatarStage {
-    private func touch(size: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 0)
+    /// Under this much travel (points) and time a touch is a tap: hop.
+    private static let tapSlop: CGFloat = 8
+    private static let tapTime = 0.35
+
+    /// Drag and tap in the stage's own space, so moving the avatar doesn't
+    /// move the coordinates the gesture is measured in.
+    private func touch(size: CGFloat, home: CGPoint) -> some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
             .onChanged { value in
-                if !touching { withAnimation(.spring(duration: 0.2)) { touching = true } }
-                drag = value.translation
+                let t = value.translation
+                if !touching {
+                    tracker.begin(at: value.time)
+                    withAnimation(.spring(response: 0.18, dampingFraction: 0.55)) { touching = true }
+                    Feedback.shared.play(.avatarPoke)
+                }
+                tracker.travel = max(tracker.travel, hypot(t.width, t.height))
+                if !tracker.dragging, tracker.travel > Self.tapSlop {
+                    tracker.dragging = true
+                    Feedback.shared.beginSquish()
+                }
+                drag = t
+                // Eyes on the finger: from where the body is now (it lags behind on the rubber band)
+                let body = Squish.bodyOffset(drag: t, size: size)
+                let reach = max(size * 0.35, 1)
+                finger = CGPoint(x: (value.location.x - home.x - body.width) / reach,
+                                 y: (value.location.y - home.y - body.height) / reach).clamped
+                if tracker.dragging { Feedback.shared.squish(stretch: Squish.stretch(drag: t, size: size)) }
             }
             .onEnded { value in
-                let moved = hypot(value.translation.width, value.translation.height)
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.32)) { // jelly spring back
+                let held = value.time.timeIntervalSince(tracker.start)
+                let isTap = !tracker.dragging && held < Self.tapTime
+                let stretch = Squish.stretch(drag: value.translation, size: size)
+                if tracker.dragging { Feedback.shared.endSquish() }
+                tracker.dragging = false
+
+                // Jelly spring back: wobblier the further it was pulled
+                let spring: Animation = isTap
+                    ? .spring(response: 0.28, dampingFraction: 0.7)
+                    : .spring(response: 0.5, dampingFraction: 0.42 - 0.14 * stretch)
+                withAnimation(spring) {
                     drag = .zero
                     touching = false
+                    finger = nil
                 }
-                if moved < 10 { boops += 1 }
+                if isTap {
+                    boops += 1
+                    Feedback.shared.play(.avatarHop)
+                    let mark = boops
+                    Task {
+                        try? await Task.sleep(for: .seconds(0.5)) // the hop lands
+                        if boops == mark { Feedback.shared.play(.avatarLand) }
+                    }
+                } else {
+                    Feedback.shared.play(.avatarRelease(stretch: stretch))
+                }
                 delighted = true
-                let mark = boops
-                Task {
+                delightTask?.cancel()
+                delightTask = Task {
                     try? await Task.sleep(for: .seconds(1.4))
-                    if boops == mark { withAnimation { delighted = false } }
+                    guard !Task.isCancelled else { return }
+                    withAnimation { delighted = false }
                 }
             }
+    }
+}
+
+/// Touch bookkeeping kept out of SwiftUI state so it doesn't redraw.
+private final class TouchTracker {
+    var start = Date()
+    var travel: CGFloat = 0
+    var dragging = false
+
+    func begin(at time: Date) {
+        start = time
+        travel = 0
+        dragging = false
     }
 }
 
@@ -118,28 +182,51 @@ private struct Hop {
     var squash: CGFloat = 1
 }
 
-/// Follows the finger with a rubber band, leans toward it and stretches along it.
+/// Follows the finger with a rubber band, leans toward it and stretches along
+/// it. Everything saturates, so a long pull never turns into a giant smear.
 private struct Squish: ViewModifier, Animatable {
     var drag: CGSize
-    var pressed: Bool
+    /// 0 released ... 1 pressed (squashed down a little), animated with the drag.
+    var press: CGFloat
     var size: CGFloat
 
-    var animatableData: AnimatablePair<CGFloat, CGFloat> {
-        get { AnimatablePair(drag.width, drag.height) }
-        set { drag = CGSize(width: newValue.first, height: newValue.second) }
+    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, CGFloat> {
+        get { AnimatablePair(AnimatablePair(drag.width, drag.height), press) }
+        set {
+            drag = CGSize(width: newValue.first.first, height: newValue.first.second)
+            press = newValue.second
+        }
+    }
+
+    /// Rubber band: follows 1:2 near the start, flattening out further away.
+    static func band(_ d: CGFloat, size: CGFloat) -> CGFloat {
+        let reach = max(size, 1) * 0.5
+        return d / (1 + abs(d) / reach) * 0.55
+    }
+
+    static func bodyOffset(drag: CGSize, size: CGFloat) -> CGSize {
+        CGSize(width: band(drag.width, size: size), height: band(drag.height, size: size))
+    }
+
+    /// 0...1 how stretched it looks (drives the squish sound and haptics).
+    static func stretch(drag: CGSize, size: CGFloat) -> Double {
+        let d = hypot(drag.width, drag.height)
+        return Double(d / (d + max(size, 1) * 0.5))
     }
 
     func body(content: Content) -> some View {
-        let reach = max(size, 1) * 0.5
-        let band = { (d: CGFloat) in d / (1 + abs(d) / reach) * 0.55 } // rubber band
-        let sx = abs(drag.width) / max(size, 1)
-        let sy = abs(drag.height) / max(size, 1)
-        let press: CGFloat = pressed ? 0.95 : 1
+        let unit = max(size, 1)
+        let soft = { (d: CGFloat) in d / (1 + abs(d)) } // -1...1
+        let sx = soft(abs(drag.width) / unit * 1.2)
+        let sy = soft(abs(drag.height) / unit * 1.2)
+        let squash = 0.06 * press
+        let offset = Self.bodyOffset(drag: drag, size: size)
         content
-            .scaleEffect(x: (1 + 0.35 * sx - 0.15 * sy) * (2 - press), y: (1 + 0.35 * sy - 0.15 * sx) * press,
+            .scaleEffect(x: (1 + 0.32 * sx - 0.12 * sy) * (1 + squash),
+                         y: (1 + 0.32 * sy - 0.12 * sx) * (1 - squash),
                          anchor: .bottom)
-            .rotationEffect(.degrees(Double(drag.width / max(size, 1)) * 22), anchor: .bottom)
-            .offset(x: band(drag.width), y: band(drag.height))
+            .rotationEffect(.degrees(Double(soft(drag.width / unit * 1.4)) * 18), anchor: .bottom)
+            .offset(x: offset.width, y: offset.height)
     }
 }
 

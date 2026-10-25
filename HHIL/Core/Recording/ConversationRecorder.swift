@@ -95,6 +95,8 @@ final class ConversationRecorder: @unchecked Sendable {
             return segments.joined(separator: " ")
         }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        // Hand the session back to the UI sounds (ambient: the silent switch mutes them)
+        try? AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default, options: [.mixWithOthers])
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }

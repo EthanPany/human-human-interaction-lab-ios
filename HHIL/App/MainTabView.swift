@@ -20,6 +20,7 @@ struct MainTabView: View {
             }
         }
         .tabViewStyle(.tabBarOnly)
+        .onChange(of: router.tab) { Feedback.shared.play(.tabSwitch) }
         .recordingConsent(isActive: !env.badge.isWorn)
         .sheet(isPresented: .constant(!didChooseSetup)) {
             SetupChoiceView { didChooseSetup = true }

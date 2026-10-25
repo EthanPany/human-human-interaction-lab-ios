@@ -23,7 +23,7 @@ struct SectionHeader<Trailing: View>: View {
 
     var body: some View {
         HStack {
-            Text(title).font(theme.body).foregroundStyle(theme.ink)
+            Text(title).font(theme.sectionTitle).foregroundStyle(theme.strongInk)
             Spacer()
             trailing
         }
@@ -34,15 +34,38 @@ extension SectionHeader where Trailing == EmptyView {
     init(title: String) { self.init(title: title) { EmptyView() } }
 }
 
-/// Small uppercase label.
+/// A section or card title without a trailing control (same style as SectionHeader).
 struct SectionLabel: View {
     var text: String
     @Environment(\.theme) private var theme
 
     var body: some View {
-        Text(text.uppercased())
-            .font(theme.caption.weight(.semibold))
-            .foregroundStyle(theme.inkSecondary)
+        Text(text)
+            .font(theme.sectionTitle)
+            .foregroundStyle(theme.strongInk)
+    }
+}
+
+/// Small label above a value ("Looking for").
+struct FieldLabel: View {
+    var text: String
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        Text(text).font(theme.fieldLabel).foregroundStyle(theme.inkSecondary)
+    }
+}
+
+/// A filled shape with the theme's tight drop shadow, for button backgrounds.
+/// Put it in `.background` so the shadow stays off the label.
+struct RaisedFill<S: Shape>: View {
+    var shape: S
+    var fill: Color
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        shape.fill(fill)
+            .shadow(color: theme.shadowColor, radius: theme.shadowRadius, y: theme.shadowY)
     }
 }
 
@@ -87,8 +110,7 @@ struct IconButton: View {
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(theme.strongInk)
                 .frame(width: 34, height: 34)
-                .background(theme.surfaceMuted, in: RoundedRectangle(cornerRadius: 8))
-                .shadow(color: .black.opacity(0.25), radius: 1, y: 4)
+                .background(RaisedFill(shape: RoundedRectangle(cornerRadius: 8), fill: theme.surfaceMuted))
         }
         .buttonStyle(PressScaleStyle())
         .accessibilityLabel(label)
@@ -105,8 +127,7 @@ struct IconButtonLabel: View {
             .font(.system(size: 15, weight: .bold))
             .foregroundStyle(theme.strongInk)
             .frame(width: 34, height: 34)
-            .background(theme.surfaceMuted, in: RoundedRectangle(cornerRadius: 8))
-            .shadow(color: .black.opacity(0.25), radius: 1, y: 4)
+            .background(RaisedFill(shape: RoundedRectangle(cornerRadius: 8), fill: theme.surfaceMuted))
     }
 }
 
@@ -121,14 +142,11 @@ struct PrimaryButtonStyle: ButtonStyle {
             .foregroundStyle(theme.strongInk)
             .frame(maxWidth: .infinity, minHeight: 52)
             // Shadow on the shape only, close under it (not on the label text)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(theme.yellowStrong)
-                    .shadow(color: .black.opacity(0.18), radius: 0, y: 2)
-            )
+            .background(RaisedFill(shape: RoundedRectangle(cornerRadius: 14), fill: theme.yellowStrong))
             .opacity(isEnabled ? 1 : 0.5)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.spring(duration: 0.2), value: configuration.isPressed)
+            .animation(.pressSpring, value: configuration.isPressed)
+            .pressFeedback(configuration.isPressed)
     }
 }
 
@@ -141,9 +159,10 @@ struct SecondaryButtonStyle: ButtonStyle {
             .font(.brand(15, .semibold))
             .foregroundStyle(theme.strongInk)
             .padding(.horizontal, 14).padding(.vertical, 9)
-            .background(theme.surfaceMuted, in: RoundedRectangle(cornerRadius: 10))
-            .shadow(color: .black.opacity(0.18), radius: 1, y: 3)
+            .background(RaisedFill(shape: RoundedRectangle(cornerRadius: 10), fill: theme.surfaceMuted))
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(.pressSpring, value: configuration.isPressed)
+            .pressFeedback(configuration.isPressed)
     }
 }
 
@@ -151,7 +170,23 @@ struct PressScaleStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.92 : 1)
-            .animation(.spring(duration: 0.2), value: configuration.isPressed)
+            .animation(.pressSpring, value: configuration.isPressed)
+            .pressFeedback(configuration.isPressed)
+    }
+}
+
+extension Animation {
+    /// Quick in, with a small bounce on the way back out.
+    static let pressSpring = Animation.spring(response: 0.22, dampingFraction: 0.6)
+}
+
+@MainActor
+private extension View {
+    /// Soft press sound and light tap the moment a button goes down.
+    func pressFeedback(_ isPressed: Bool) -> some View {
+        onChange(of: isPressed) { _, pressed in
+            if pressed { Feedback.shared.play(.buttonPress) }
+        }
     }
 }
 

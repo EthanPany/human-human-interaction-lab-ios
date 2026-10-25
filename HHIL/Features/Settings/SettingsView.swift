@@ -5,6 +5,8 @@ struct SettingsView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.theme) private var theme
     @State private var provider = AppConfig.backendProvider
+    @AppStorage(Feedback.soundsKey) private var sounds = true
+    @AppStorage(Feedback.hapticsKey) private var haptics = true
 
     var body: some View {
         let p = env.session.profile
@@ -27,6 +29,17 @@ struct SettingsView: View {
                 Text("Recording")
             } footer: {
                 Text("Recordings are transcribed on your phone for your summary. California mode asks before each recording.")
+            }
+
+            Section {
+                Toggle("Sounds", isOn: $sounds)
+                    .onChange(of: sounds) { _, on in Feedback.shared.play(.toggle(on: on)) }
+                Toggle("Haptics", isOn: $haptics)
+                    .onChange(of: haptics) { _, on in Feedback.shared.play(.toggle(on: on)) }
+            } header: {
+                Text("Feedback")
+            } footer: {
+                Text("Soft sounds and taps when you touch your avatar and when a match comes close. The silent switch also mutes the sounds.")
             }
 
             Section {
@@ -66,7 +79,12 @@ struct SettingsView: View {
     ) -> Binding<Bool> {
         Binding(
             get: { env.session.profile?[keyPath: key] ?? value },
-            set: { newValue in Task { await env.session.update(patch(newValue)) } }
+            set: { newValue in
+                Task { @MainActor in
+                    Feedback.shared.play(.toggle(on: newValue))
+                    await env.session.update(patch(newValue))
+                }
+            }
         )
     }
 }

@@ -7,8 +7,20 @@ import Observation
 @Observable
 final class BadgeStore {
     private(set) var state: BadgeState = .idle
-    /// Full screen "worn" badge vs the window in the Badge tab.
-    var isWorn = false
+    /// Full screen "worn" badge vs the window in the Badge tab. Every way in
+    /// or out (gestures, the hinge, the system's dismiss) passes through here,
+    /// so this is where the wear and take off cues play.
+    var isWorn = false {
+        didSet {
+            guard isWorn != oldValue else { return }
+            Feedback.shared.play(isWorn ? .wear : .takeOff)
+            cues.isWorn = isWorn
+        }
+    }
+    /// Set by the Badge tab while its preview is on screen (for the approach cues).
+    var isPreviewVisible = false {
+        didSet { cues.isPreviewVisible = isPreviewVisible }
+    }
     /// Set while California mode waits for the user to approve a recording.
     var pendingConsentConversationId: String?
 
@@ -19,6 +31,7 @@ final class BadgeStore {
     private var activeConversationId: String?
     /// The task starting the recorder; cancelled if the talk ends first.
     private var recordingTask: Task<Void, Never>?
+    private let cues = BadgeCues()
 
     init(backend: Backend, recorder: ConversationRecorder) {
         self.backend = backend
@@ -40,6 +53,7 @@ final class BadgeStore {
     func stop() {
         task?.cancel()
         state = .idle
+        cues.reset()
         pendingConsentConversationId = nil
         if let id = activeConversationId {
             activeConversationId = nil
@@ -66,6 +80,7 @@ final class BadgeStore {
 
     private func apply(_ new: BadgeState) async {
         state = new
+        cues.update(new)
 
         // Entered a new conversation
         if new.mode == .talking, let id = new.conversationId, id != activeConversationId {

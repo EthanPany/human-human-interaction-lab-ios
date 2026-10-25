@@ -18,7 +18,7 @@ struct InterestsCard<Trailing: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14 * scale) {
             HStack {
-                Text(title).font(.brandFixed(16 * scale)).foregroundStyle(theme.ink)
+                Text(title).font(.brandFixed(theme.sectionTitleSize * scale, .semibold)).foregroundStyle(theme.strongInk)
                 Spacer()
                 trailing
             }

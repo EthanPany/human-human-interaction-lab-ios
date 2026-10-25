@@ -45,6 +45,16 @@ struct Theme {
     var headline = Font.brand(17, .semibold)
     var body = Font.brand(16)
     var caption = Font.brand(12)
+    /// Every section and card title ("Interests", "At this event", "Your agent", ...).
+    var sectionTitleSize: CGFloat = 18
+    var sectionTitle: Font { .brand(sectionTitleSize, .semibold) }
+    /// Small labels above a value ("Looking for", "I can help with").
+    var fieldLabel = Font.brand(13, .semibold)
+
+    /// Buttons and pills sit close on their shadow: on the shape only, never the label.
+    var shadowColor = Color.black.opacity(0.22)
+    var shadowRadius: CGFloat = 0.75
+    var shadowY: CGFloat = 1.5
 
     /// How the badge itself is drawn (window and worn).
     var badgeStyle: any BadgeStyle = PlayfulBadgeStyle()

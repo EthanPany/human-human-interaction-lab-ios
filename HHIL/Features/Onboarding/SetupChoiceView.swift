@@ -40,7 +40,7 @@ struct SetupChoiceView: View {
             HStack(alignment: .top, spacing: 14) {
                 IconButtonLabel(systemImage: icon)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(title).font(theme.headline).foregroundStyle(theme.strongInk)
+                    Text(title).font(theme.sectionTitle).foregroundStyle(theme.strongInk)
                     Text(detail).font(theme.body).foregroundStyle(theme.ink)
                         .multilineTextAlignment(.leading)
                 }
