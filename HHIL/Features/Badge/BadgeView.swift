@@ -39,9 +39,12 @@ struct BadgeView: View {
             frontTag: front,
             mode: state.mode,
             closeness: Self.closeness(state: state, localMeters: state.peerId.flatMap { env.nearby.diagnostics[$0]?.meters }),
-            matchColor: active ? state.color.map(Color.init(hex:)) : nil,
+            // The shared match color, or the badge accent if the server sent none
+            matchColor: active ? (state.color.map(Color.init(hex:)) ?? theme.yellowStrong) : nil,
             peerAvatar: state.peerAvatar,
             peerSeed: AvatarStyle.seed(state.peerId ?? ""),
+            together: state.peerId != nil && env.badge.togetherWith == state.peerId,
+            meetCount: env.badge.meetCount,
             look: state.peerId.flatMap { env.nearby.directions[$0] }.map { CGPoint(x: $0, y: 0) },
             followsTilt: state.mode == .idle,
             presentation: presentation,
@@ -53,7 +56,7 @@ struct BadgeView: View {
     /// from this phone's UWB reading when it has one (no round trip), on the
     /// same scale as the server: shows from 10 m, full strength at 3 m.
     private static func closeness(state: BadgeState, localMeters: Double?) -> Double {
-        guard state.mode == .match, let m = localMeters else { return state.closeness }
+        guard state.mode == .match || state.mode == .connected, let m = localMeters else { return state.closeness }
         return max(0, min(1, (10 - m) / (10 - 3)))
     }
 

@@ -35,6 +35,7 @@ struct IdentityCard: View {
             }
         }
         .frame(maxWidth: .infinity, minHeight: minHeight)
+        .animation(.easeInOut(duration: 0.8), value: c.tintStrength)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { cardWidth = $0 }
         .clipShape(shape)
     }
@@ -47,7 +48,13 @@ struct IdentityCard: View {
     /// so a long name can't end up under the avatar.
     private var avatarCard: some View {
         nameUnderAvatar(ink: theme.strongInk, avatarReach: 0.85)
-            .background(theme.surface)
+            .background(surface)
+    }
+
+    /// The card takes on a little of the match color as they get closer.
+    private var surface: Color {
+        guard let tint = c.matchColor, c.tintStrength > 0 else { return theme.surface }
+        return theme.surface.mix(with: tint, by: theme.matchCardTint * c.tintStrength)
     }
 
     private var photoBeside: some View {
@@ -72,7 +79,7 @@ struct IdentityCard: View {
                 .padding(12 * scale)
         }
         .frame(minHeight: photoWidth * 1.15)
-        .background(theme.surface)
+        .background(surface)
     }
 
     private var fullPhoto: some View {
@@ -125,7 +132,9 @@ struct IdentityCard: View {
             peer: c.peerAvatar,
             peerSeed: c.peerSeed,
             hasMet: c.hasMet,
-            peerSide: (c.look?.x ?? 1) < 0 ? -1 : 1
+            peerSide: (c.look?.x ?? 1) < 0 ? -1 : 1,
+            meetCount: c.meetCount,
+            rippleColor: c.matchColor ?? c.avatarColor
         )
         // The wearer's own idle avatar feels the phone move (walking, shakes, stillness)
         .avatarSensesMotion(c.followsTilt)

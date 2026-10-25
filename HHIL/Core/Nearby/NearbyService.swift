@@ -47,6 +47,8 @@ final class NearbyService: NSObject {
     private(set) var status: Status = .idle
     private(set) var diagnostics: [String: PeerDiagnostics] = [:]
     var extendedRange: Bool { Self.supportsExtendedRange }
+    /// Every smoothed reading (peer id, meters), for the badge's meet moment.
+    @ObservationIgnored var onDistance: (@MainActor (String, Double) -> Void)?
 
     @ObservationIgnored private let backend: Backend
     @ObservationIgnored private var userId: String?
@@ -183,6 +185,7 @@ final class NearbyService: NSObject {
         smoothed[peerId] = value
         diagnostics[peerId]?.meters = value
         diagnostics[peerId]?.updatedAt = Date()
+        onDistance?(peerId, value)
 
         // Twice a second, or right away on a big change
         let now = Date()

@@ -1,8 +1,9 @@
 import Foundation
 import Observation
 
-/// The badge: live state from the server, whether it is worn full screen, and
-/// starting or stopping a conversation recording as the state changes.
+/// The badge: live state from the server, whether it is worn full screen, the
+/// "we finally met" moment, and starting or stopping a conversation recording
+/// as the state changes.
 @MainActor
 @Observable
 final class BadgeStore {
@@ -24,14 +25,38 @@ final class BadgeStore {
     /// Set while California mode waits for the user to approve a recording.
     var pendingConsentConversationId: String?
 
+    /// Goes up by one at each "we finally met" moment (the avatars jump to each other).
+    private(set) var meetCount = 0
+    /// The person we met and are still standing with (nil once we part).
+    private(set) var togetherWith: String?
+    /// When the current recording actually started (nil when not recording).
+    private(set) var recordingStartedAt: Date?
+
     private let backend: Backend
     private let recorder: ConversationRecorder
     private var task: Task<Void, Never>?
+    private var userId: String?
     /// The conversation the server says we are in (recorded or not).
     private var activeConversationId: String?
     /// The task starting the recorder; cancelled if the talk ends first.
     private var recordingTask: Task<Void, Never>?
+    /// Waits out a short blip out of the talking state before ending the conversation.
+    private var leaveTask: Task<Void, Never>?
     private let cues = BadgeCues()
+
+    /// The meet moment's bookkeeping: who, and when we were last near each other.
+    private var metPeerId: String?
+    private var lastTogether = Date.distantPast
+    private var lastMeetAt = Date.distantPast
+
+    /// Same as TALK_DISTANCE_M in backend/convex/lib/constants.ts.
+    static let meetDistance = 1.5
+    /// Further than this, we have parted (the avatars separate again).
+    static let apartDistance = 3.0
+    /// Apart at least this long before meeting the same person counts again.
+    static let meetAgainAfter: TimeInterval = 20
+    /// Out of the talking state this long before the conversation really ends.
+    static let leaveGrace: Duration = .seconds(6)
 
     init(backend: Backend, recorder: ConversationRecorder) {
         self.backend = backend
@@ -39,6 +64,7 @@ final class BadgeStore {
     }
 
     func start(userId: String) {
+        self.userId = userId
         task?.cancel()
         task = Task { [backend] in
             do {
@@ -52,9 +78,14 @@ final class BadgeStore {
     /// Sign out: stop listening, and close any conversation in progress.
     func stop() {
         task?.cancel()
+        userId = nil
         state = .idle
         cues.reset()
         pendingConsentConversationId = nil
+        metPeerId = nil
+        togetherWith = nil
+        leaveTask?.cancel()
+        leaveTask = nil
         if let id = activeConversationId {
             activeConversationId = nil
             Task { await self.finish(id) }
@@ -76,26 +107,94 @@ final class BadgeStore {
         pendingConsentConversationId = nil
     }
 
+    // MARK: Meeting
+
+    /// This phone's smoothed UWB distance to a peer (NearbyService, a few times a second).
+    func nearbyDistance(peerId: String, meters: Double) {
+        if peerId == togetherWith, meters > Self.apartDistance {
+            togetherWith = nil
+            cues.together = false
+        }
+        if peerId == togetherWith { lastTogether = Date() }
+        guard peerId == state.peerId, state.mode != .idle, meters <= Self.meetDistance else { return }
+        meet(peerId)
+    }
+
+    /// The "we finally met" moment, once per meeting: the first time we come
+    /// within talking distance, or again after being apart for a while.
+    private func meet(_ peerId: String) {
+        let now = Date()
+        defer { lastTogether = now }
+        if peerId == metPeerId, now.timeIntervalSince(lastTogether) < Self.meetAgainAfter {
+            togetherWith = peerId // still together (or back after a blip)
+            cues.together = true
+            return
+        }
+        metPeerId = peerId
+        togetherWith = peerId
+        lastMeetAt = now
+        meetCount += 1
+        // Let the avatars leap first; the stone lands with them.
+        Task {
+            try? await Task.sleep(for: .seconds(0.5))
+            self.cues.met()
+        }
+        if let userId {
+            Task { [backend] in
+                do {
+                    try await backend.markMet(userId: userId, otherId: peerId)
+                } catch {
+                    print("mark met failed:", error)
+                }
+            }
+        }
+    }
+
     // MARK: State changes
 
     private func apply(_ new: BadgeState) async {
         state = new
         cues.update(new)
 
-        // Entered a new conversation
-        if new.mode == .talking, let id = new.conversationId, id != activeConversationId {
-            activeConversationId = id
-            if new.recordConversations {
-                if new.californiaMode { pendingConsentConversationId = id } else { startRecording() }
+        // Someone else is the match now, or nobody: we're not standing together anymore.
+        if let together = togetherWith, together != new.peerId {
+            togetherWith = nil
+            cues.together = false
+        }
+        // Talking means we're together, even if this phone has no reading of its own.
+        if new.mode == .talking, let peerId = new.peerId { meet(peerId) }
+
+        if new.mode == .talking, let id = new.conversationId {
+            if id == activeConversationId {
+                // Back in the same conversation after a blip: keep recording.
+                leaveTask?.cancel()
+                leaveTask = nil
+            } else {
+                if let old = activeConversationId { await leave(old) }
+                activeConversationId = id
+                if new.recordConversations {
+                    if new.californiaMode { pendingConsentConversationId = id } else { startRecording() }
+                }
             }
         }
 
-        // Left the conversation: stop, upload what we have, trigger follow ups
-        if new.mode != .talking, let id = activeConversationId {
-            activeConversationId = nil
-            pendingConsentConversationId = nil
-            await finish(id)
+        // Left the conversation: after a short grace, stop, upload what we have, trigger follow ups
+        if new.mode != .talking, let id = activeConversationId, leaveTask == nil {
+            leaveTask = Task {
+                try? await Task.sleep(for: Self.leaveGrace)
+                guard !Task.isCancelled else { return }
+                await self.leave(id)
+            }
         }
+    }
+
+    private func leave(_ id: String) async {
+        guard activeConversationId == id else { return }
+        activeConversationId = nil
+        pendingConsentConversationId = nil
+        leaveTask?.cancel()
+        leaveTask = nil
+        await finish(id)
     }
 
     /// Stop recording (if any), upload the transcript, trigger follow ups.
@@ -107,11 +206,19 @@ final class BadgeStore {
             await starting.value // start() gives up or completes before we stop
             transcript = await recorder.stop()
         }
+        recordingStartedAt = nil
         try? await backend.finishConversation(id: id, transcript: transcript)
     }
 
     private func startRecording() {
         let recorder = recorder
-        recordingTask = Task { await recorder.start() }
+        // The meet sound plays on the speaker; let it ring out before the mic takes the session.
+        let wait = max(0, 1.8 - Date().timeIntervalSince(lastMeetAt))
+        recordingTask = Task {
+            if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+            guard !Task.isCancelled else { return }
+            await recorder.start()
+            if !Task.isCancelled, recorder.isRecording { self.recordingStartedAt = Date() }
+        }
     }
 }

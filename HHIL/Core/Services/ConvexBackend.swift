@@ -136,6 +136,10 @@ final class ConvexBackend: Backend {
         stream("people:current", ["userId": userId], String?.self)
     }
 
+    func markMet(userId: String, otherId: String) async throws {
+        let _: String? = try await client.mutation("people:met", with: ["userId": userId, "otherId": otherId])
+    }
+
     // MARK: Helpers
 
     /// Drop nil values: Convex optional arguments must be absent, not null.

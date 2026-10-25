@@ -120,6 +120,7 @@ final class MockBackend: Backend {
         return once(detail)
     }
     func currentPerson(userId: String) -> AsyncThrowingStream<String?, Error> { once(nil) }
+    func markMet(userId: String, otherId: String) async throws {}
 
     /// Sample people so the People tab has something to show.
     private static let people: [PersonSummary] = {

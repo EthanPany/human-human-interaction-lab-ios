@@ -26,6 +26,10 @@ final class AppEnvironment {
         session = SessionStore(backend: backend, start: start)
         badge = BadgeStore(backend: backend, recorder: recorder)
         nearby = NearbyService(backend: backend)
+        let badgeStore = badge
+        nearby.onDistance = { [weak badgeStore] peerId, meters in
+            badgeStore?.nearbyDistance(peerId: peerId, meters: meters)
+        }
     }
 
     /// The backend picked in Settings (Convex by default). UI tests pass

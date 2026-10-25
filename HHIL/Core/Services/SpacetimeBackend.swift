@@ -128,6 +128,10 @@ final class SpacetimeBackend: Backend, @unchecked Sendable {
         poll("people:current", ["userId": userId], String?.self)
     }
 
+    func markMet(userId: String, otherId: String) async throws {
+        try await send("people:met", ["userId": userId, "otherId": otherId])
+    }
+
     // MARK: Transport
 
     private struct Envelope<T: Decodable>: Decodable {

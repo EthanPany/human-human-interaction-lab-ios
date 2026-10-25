@@ -29,7 +29,8 @@ private struct PlayfulBadge: View {
 
             ZStack {
                 FlowingBackground()
-                MatchGlow(color: c.matchColor, intensity: c.mode == .idle ? 0 : c.closeness)
+                MatchWash(color: c.matchColor, strength: c.tintStrength)
+                MatchGlow(color: c.matchColor, intensity: c.tintStrength)
 
                 if horizontal {
                     HStack(spacing: 14 * scale) {
@@ -59,6 +60,24 @@ private struct PlayfulBadge: View {
             fontSize: c.keywords.isEmpty ? size * 0.6 : size,
             shape: shape
         )
+    }
+}
+
+/// The shared match color laid over the whole background, stronger as they get closer.
+private struct MatchWash: View {
+    var color: Color?
+    var strength: Double
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        let range = theme.matchWashOpacity
+        let opacity = strength > 0 ? range.lowerBound + (range.upperBound - range.lowerBound) * strength : 0
+        Rectangle()
+            .fill(color ?? .clear)
+            .opacity(opacity)
+            .allowsHitTesting(false)
+            .animation(.easeInOut(duration: 0.8), value: opacity)
+            .ignoresSafeArea()
     }
 }
 

@@ -48,6 +48,7 @@ struct BadgeTabView: View {
                     // Inner cards round concentrically with this frame
                     .containerShape(RoundedRectangle(cornerRadius: radius))
                     .clipShape(RoundedRectangle(cornerRadius: radius))
+                    .recordingIndicator(env.badge.recordingStartedAt)
                     .overlay(RoundedRectangle(cornerRadius: radius).stroke(.white, lineWidth: 6))
                     .shadow(color: .black.opacity(0.14), radius: 20, y: 10)
                     .scaleEffect(min(max(pinch, 0.95), 1.15) * (1 + min(0.12, -lift / 900)))
@@ -109,8 +110,13 @@ struct BadgeTabView: View {
         let name = state.peerName ?? "Someone"
         switch state.mode {
         case .idle: return "Swipe up or pinch out to wear it. Your badge reacts when someone you should meet comes close."
+        case .match where env.badge.togetherWith == state.peerId:
+            return "You found \(name)! Say hi."
         case .match: return "\(name) is nearby. Your avatar is taking on your shared color."
-        case .talking: return "You're talking with \(name)."
+        case .talking:
+            return env.badge.recordingStartedAt == nil
+                ? "You're talking with \(name)."
+                : "You're talking with \(name). Recording for your summary."
         case .connected: return "\(name) is in your People. Say hi again!"
         }
     }

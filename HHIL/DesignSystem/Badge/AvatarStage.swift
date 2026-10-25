@@ -2,7 +2,9 @@ import SwiftUI
 
 /// My avatar, and when we meet, theirs: it jumps into my frame along an arc
 /// and lands beside mine. The other phone shows the mirror image, so it reads
-/// as the two avatars hopping into each other's badge.
+/// as the two avatars hopping into each other's badge. At the "we finally met"
+/// moment mine leaps toward theirs too, both land with a squash, and rings
+/// spread out from where they land, like a stone dropped into a lake.
 struct AvatarStage: View {
     var avatar: AvatarStyle
     var color: Color
@@ -15,8 +17,12 @@ struct AvatarStage: View {
     var hasMet: Bool
     /// Which side the peer comes from (-1 left, 1 right), from UWB direction.
     var peerSide: Double = 1
+    /// Goes up at each meet moment: the leap toward each other and the ripples.
+    var meetCount = 0
+    var rippleColor: Color = .clear
 
     @Environment(MotionService.self) private var motion
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Touch: drag to squish and lean it, tap to make it hop.
     @State private var drag: CGSize = .zero
@@ -45,6 +51,10 @@ struct AvatarStage: View {
             let home = CGPoint(x: geo.size.width / 2 + (hasMet ? -peerSide * size * 0.2 : 0),
                                y: geo.size.height / 2 + (hasMet ? size * 0.12 : 0))
             ZStack {
+                MeetRipples(color: rippleColor, trigger: meetCount)
+                    .frame(width: size * 1.6, height: size * 0.5)
+                    .offset(y: size * 0.4)
+
                 AvatarView(
                     shape: avatar.shape,
                     color: color,
@@ -72,6 +82,7 @@ struct AvatarStage: View {
                         SpringKeyframe(1, duration: 0.35, spring: .bouncy)
                     }
                 }
+                .modifier(MeetLeap(trigger: reduceMotion ? 0 : meetCount, side: peerSide, size: mySize))
                 .contentShape(Circle().scale(0.8))
                 .gesture(touch(size: mySize, home: home))
                 .offset(x: hasMet ? -peerSide * size * 0.2 : 0, y: hasMet ? size * 0.12 : 0)
@@ -85,6 +96,7 @@ struct AvatarStage: View {
                         seed: peerSeed
                     )
                     .frame(width: size * 0.66, height: size * 0.66)
+                    .modifier(MeetLeap(trigger: reduceMotion ? 0 : meetCount, side: -peerSide, size: size * 0.66, delay: 0.12))
                     .offset(x: peerSide * size * 0.28, y: size * 0.14)
                     .transition(.jumpIn(from: peerSide, distance: size * 1.2, height: size * 0.7))
                 }
@@ -174,6 +186,88 @@ private final class TouchTracker {
         travel = 0
         dragging = false
     }
+}
+
+/// The meet leap: crouch, jump toward the other avatar along an arc, land with
+/// a heavy squash (when the settling sound hits) and wobble back to rest.
+private struct MeetLeap: ViewModifier {
+    var trigger: Int
+    /// Which way to leap (-1 left, 1 right).
+    var side: Double
+    var size: CGFloat
+    var delay: Double = 0
+
+    func body(content: Content) -> some View {
+        content.keyframeAnimator(initialValue: Leap(), trigger: trigger) { content, leap in
+            content
+                .scaleEffect(x: 2 - leap.squash, y: leap.squash, anchor: .bottom)
+                .offset(x: CGFloat(side) * leap.travel * size, y: leap.lift * size)
+        } keyframes: { _ in
+            KeyframeTrack(\.lift) {
+                CubicKeyframe(0, duration: 0.1 + delay)
+                CubicKeyframe(-0.3, duration: 0.22)
+                CubicKeyframe(0, duration: 0.2)
+                SpringKeyframe(0, duration: 0.5, spring: .bouncy)
+            }
+            KeyframeTrack(\.travel) {
+                CubicKeyframe(0, duration: 0.1 + delay)
+                CubicKeyframe(0.16, duration: 0.42)
+                SpringKeyframe(0, duration: 0.8, spring: .smooth)
+            }
+            KeyframeTrack(\.squash) {
+                CubicKeyframe(0.8, duration: 0.1 + delay)
+                CubicKeyframe(1.12, duration: 0.2)
+                CubicKeyframe(1, duration: 0.22)
+                CubicKeyframe(0.74, duration: 0.07)
+                SpringKeyframe(1, duration: 0.6, spring: .bouncy)
+            }
+        }
+    }
+}
+
+private struct Leap {
+    var lift: CGFloat = 0
+    /// Toward the other avatar, as a fraction of size.
+    var travel: CGFloat = 0
+    var squash: CGFloat = 1
+}
+
+/// Rings spreading out over water from where the avatars land, then gone.
+private struct MeetRipples: View {
+    var color: Color
+    var trigger: Int
+
+    var body: some View {
+        Color.clear
+            .keyframeAnimator(initialValue: Ripple(), trigger: trigger) { _, ripple in
+                ZStack {
+                    ForEach(0..<3, id: \.self) { i in
+                        let p = max(0, min(1, ripple.progress * 1.35 - Double(i) * 0.18))
+                        Ellipse()
+                            .stroke(color, lineWidth: 2 + 5 * (1 - p))
+                            .scaleEffect(0.25 + 0.9 * p)
+                            .opacity(ripple.opacity * (1 - p) * (p > 0 ? 1 : 0))
+                    }
+                }
+            } keyframes: { _ in
+                KeyframeTrack(\.progress) {
+                    LinearKeyframe(0, duration: 0.6)
+                    CubicKeyframe(1, duration: 1.7)
+                }
+                KeyframeTrack(\.opacity) {
+                    LinearKeyframe(0, duration: 0.6)
+                    LinearKeyframe(0.8, duration: 0.05)
+                    CubicKeyframe(0, duration: 1.65)
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
+private struct Ripple {
+    var progress: Double = 0
+    var opacity: Double = 0
 }
 
 /// Values for the tap hop: lift (fraction of size, negative is up) and squash (1 = rest).

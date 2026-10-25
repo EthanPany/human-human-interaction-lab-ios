@@ -15,6 +15,7 @@ struct WornBadgeView: View {
             )
         }
         .ignoresSafeArea()
+        .recordingIndicator(env.badge.recordingStartedAt)
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
         .contentShape(Rectangle())

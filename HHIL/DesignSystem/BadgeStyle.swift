@@ -38,6 +38,11 @@ struct BadgeConfiguration {
     var matchColor: Color?
     var peerAvatar: AvatarStyle?
     var peerSeed: Int
+    /// We came within talking distance and are still together (before the
+    /// server calls it a conversation, too).
+    var together = false
+    /// Goes up at each "we finally met" moment: the avatars leap to each other.
+    var meetCount = 0
     /// Where my avatar should look (-1...1) when UWB knows the match's direction.
     var look: CGPoint?
     /// With nobody near, the eyes follow the phone's tilt (read inside the avatar
@@ -48,7 +53,13 @@ struct BadgeConfiguration {
     var orientation: Orientation
 
     /// The two avatars share one frame (talking or saved).
-    var hasMet: Bool { (mode == .talking || mode == .connected) && peerAvatar != nil }
+    var hasMet: Bool { (together || mode == .talking || mode == .connected) && peerAvatar != nil }
+
+    /// 0...1 how strongly the match color tints the badge: grows as they get closer.
+    var tintStrength: Double {
+        guard mode != .idle, matchColor != nil else { return 0 }
+        return together ? 1 : max(0, min(1, closeness))
+    }
 
     /// My avatar's color after proximity tinting.
     var avatarColor: Color {

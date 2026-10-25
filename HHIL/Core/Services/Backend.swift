@@ -28,4 +28,6 @@ protocol Backend: AnyObject {
     func people(userId: String) -> AsyncThrowingStream<[PersonSummary], Error>
     func personDetail(userId: String, otherId: String) -> AsyncThrowingStream<PersonDetail?, Error>
     func currentPerson(userId: String) -> AsyncThrowingStream<String?, Error>
+    /// We met in person (the badge's meet moment): they join my People list.
+    func markMet(userId: String, otherId: String) async throws
 }

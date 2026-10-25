@@ -84,6 +84,14 @@ struct Theme {
     var shadowRadius: CGFloat = 0.75
     var shadowY: CGFloat = 1.5
 
+    /// The match color washed over the badge background: this opacity when a
+    /// match is first sensed, rising to the upper bound at talking distance.
+    var matchWashOpacity: ClosedRange<Double> = 0.1...0.6
+    /// How much of the match color the white identity card takes on at talking distance.
+    var matchCardTint: Double = 0.22
+    /// The recording dot on the badge screen.
+    var recordingDot = Color(hex: "#FF3B30")
+
     /// How the badge itself is drawn (window and worn).
     var badgeStyle: any BadgeStyle = PlayfulBadgeStyle()
 
