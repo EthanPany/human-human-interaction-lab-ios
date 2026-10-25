@@ -97,6 +97,8 @@ final class ConversationRecorder: @unchecked Sendable {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         // Hand the session back to the UI sounds (ambient: the silent switch mutes them)
         try? AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default, options: [.mixWithOthers])
+        // The session was deactivated above: the UI sounds must bring it back up.
+        await MainActor.run { NotificationCenter.default.post(name: .audioSessionReleased, object: nil) }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }

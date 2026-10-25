@@ -41,8 +41,19 @@ final class SoundEngine {
                 _ = self.ensureRunning() // a new route: come straight back up
             }
         })
-        observers.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { self.sessionReady = false }
+        // A phone call, Siri or another app took the session: re-activate when it ends.
+        observers.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { note in
+            let ended = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt) == AVAudioSession.InterruptionType.ended.rawValue
+            MainActor.assumeIsolated { self.restart(now: ended) }
+        })
+        // The recorder deactivated the session when it stopped. Before this the
+        // engine kept "running" on a dead session and every cue was silent until
+        // the app was relaunched.
+        observers.append(center.addObserver(forName: .audioSessionReleased, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { self.restart(now: true) }
+        })
+        observers.append(center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { self.restart(now: true) }
         })
     }
 
@@ -72,6 +83,14 @@ final class SoundEngine {
     func suspend() {
         squish.set(stretch: 0, motion: 0)
         if engine.isRunning { engine.stop() }
+    }
+
+    /// Forget the session and stop the engine; come back up now or on the next sound.
+    private func restart(now: Bool) {
+        sessionReady = false
+        players.forEach { $0.stop() }
+        if engine.isRunning { engine.stop() }
+        if now { _ = ensureRunning() }
     }
 
     private func ensureRunning() -> Bool {
@@ -173,4 +192,9 @@ final class SquishVoice {
             return noErr
         }
     }
+}
+
+extension Notification.Name {
+    /// Posted when the conversation recorder hands the audio session back.
+    static let audioSessionReleased = Notification.Name("HHILAudioSessionReleased")
 }
