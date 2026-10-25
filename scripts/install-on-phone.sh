@@ -30,7 +30,16 @@ for x in d:
     if h.get("reality")=="physical" and h.get("deviceType")=="iPhone" and c.get("pairingState")=="paired" and c.get("tunnelState")!="unavailable":
         print(x["identifier"], h["udid"], x["deviceProperties"]["name"].replace(" ","_"))
 ')}")
-[ -n "${DEVICES[1]}" ] || { echo "NO_DEVICE: unlock the iPhone and keep it connected"; exit 1; }
+if [ -z "${DEVICES[1]}" ]; then
+  echo "NO_DEVICE: unlock the iPhone and keep it connected. Phones seen:"
+  python3 -c '
+import json
+for x in json.load(open("/tmp/hhil-devices.json"))["result"]["devices"]:
+    h,c=x["hardwareProperties"],x["connectionProperties"]
+    print(" ", x["deviceProperties"]["name"], h.get("reality"), c.get("pairingState"), c.get("tunnelState"), c.get("transportType"))
+'
+  exit 1
+fi
 for line in "${DEVICES[@]}"; do echo "DEVICE $line"; done
 FIRST_UDID=$(echo "${DEVICES[1]}" | cut -d' ' -f2)
 
