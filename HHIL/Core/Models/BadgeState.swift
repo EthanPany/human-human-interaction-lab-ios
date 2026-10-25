@@ -25,7 +25,7 @@ struct BadgeState: Decodable {
     static let idle = BadgeState(
         mode: .idle, glow: 0, color: nil, frontTag: nil, peerId: nil, peerName: nil,
         peerAvatarShape: nil, peerAvatarColor: nil, closeness: 0,
-        conversationId: nil, recordConversations: true, californiaMode: true
+        conversationId: nil, recordConversations: true, californiaMode: false
     )
 
     var peerAvatar: AvatarStyle? {

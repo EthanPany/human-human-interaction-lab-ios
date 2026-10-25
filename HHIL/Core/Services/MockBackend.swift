@@ -9,7 +9,7 @@ final class MockBackend: Backend {
         id: demoUserId, phone: "+15555550100", name: "Ethan", headline: "Brand marketer", company: "Cal Hacks",
         location: "Berkeley, CA", tags: ["Student", "Product designer", "Startup founder"],
         lookingFor: "iOS engineers", offers: "Design, multiagent systems", hobbies: ["Climbing", "Film photos"],
-        appearance: nil, californiaMode: true, recordConversations: true, hasPassword: false,
+        appearance: nil, californiaMode: false, recordConversations: true, hasPassword: false,
         avatarShape: "blob", avatarColor: "#FF6C6E", badgeLayout: "avatar", photoUrl: nil
     )
     private var profileWatchers: [UUID: AsyncThrowingStream<UserProfile?, Error>.Continuation] = [:]
@@ -63,7 +63,7 @@ final class MockBackend: Backend {
                             frontTag: mode == .idle ? nil : "Product designer",
                             peerId: mode == .idle ? nil : "p1", peerName: mode == .idle ? nil : "Maya",
                             peerAvatarShape: "blob", peerAvatarColor: "#3BB52D", closeness: closeness,
-                            conversationId: nil, recordConversations: true, californiaMode: true,
+                            conversationId: nil, recordConversations: true, californiaMode: false,
                             keywords: mode == .idle ? nil : ["Agent design", "iOS engineers", "Film photos"]
                         ))
                         try? await Task.sleep(for: .seconds(4))

@@ -21,10 +21,11 @@ private struct PlayfulBadge: View {
             let scale = horizontal ? geo.size.width / 874 : geo.size.width / 402
             let worn = c.presentation == .worn
             let pad = (worn ? 16 : 14) * scale
-            // Worn full screen, the cards follow the phone's own corner radius.
-            let shape = worn
-                ? AnyShape(ConcentricRectangle(corners: .concentric(minimum: .fixed(28 * scale)), isUniform: true))
-                : AnyShape(RoundedRectangle(cornerRadius: theme.cornerRadius * scale * 1.6))
+            // Cards round concentrically with what holds them: the phone's own
+            // screen corners when worn, the preview frame's corners in the tab
+            // (BadgeTabView sets that as the container shape). So inner radius =
+            // outer radius minus the gap, at any size.
+            let shape = AnyShape(ConcentricRectangle(corners: .concentric(minimum: .fixed(12 * scale)), isUniform: true))
 
             ZStack {
                 FlowingBackground()

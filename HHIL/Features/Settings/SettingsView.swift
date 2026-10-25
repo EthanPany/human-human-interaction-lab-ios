@@ -4,8 +4,7 @@ struct SettingsView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.openURL) private var openURL
     @Environment(\.theme) private var theme
-    @State private var backendURL = AppConfig.convexURLOverride ?? ""
-    @State private var savedURLNote = false
+    @State private var provider = AppConfig.backendProvider
 
     var body: some View {
         let p = env.session.profile
@@ -31,20 +30,15 @@ struct SettingsView: View {
             }
 
             Section {
-                TextField("https://your-deployment.convex.cloud", text: $backendURL)
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.URL)
-                    .autocorrectionDisabled()
-                Button("Use this backend") {
-                    AppConfig.setConvexURLOverride(backendURL.nilIfBlank)
-                    savedURLNote = true
+                Picker("Backend", selection: $provider) {
+                    ForEach(BackendProvider.allCases) { Text($0.displayName).tag($0) }
                 }
+                .pickerStyle(.segmented)
+                .onChange(of: provider) { _, new in switchBackend(to: new) }
             } header: {
                 Text("Backend")
             } footer: {
-                Text(savedURLNote
-                     ? "Saved. Quit and reopen the app to switch."
-                     : "Leave empty to use the build setting. Use this to point at a local backend on your network.")
+                Text("Both run the same app. Each keeps its own accounts, so switching signs you out.")
             }
 
             Section {
@@ -54,6 +48,14 @@ struct SettingsView: View {
         .scrollContentBackground(.hidden)
         .background(theme.background)
         .navigationTitle("Settings")
+    }
+
+    /// Accounts don't carry over between providers, so sign out first; the
+    /// app then rebuilds itself on the new backend (see HHILApp).
+    private func switchBackend(to new: BackendProvider) {
+        guard new != env.provider else { return }
+        env.session.signOut()
+        AppConfig.setBackendProvider(new)
     }
 
     /// A toggle bound to a profile flag that saves to the backend on change.

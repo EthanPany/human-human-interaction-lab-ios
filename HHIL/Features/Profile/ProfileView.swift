@@ -196,7 +196,7 @@ private struct RegionPill: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        let california = env.session.profile?.californiaMode ?? true
+        let california = env.session.profile?.californiaMode ?? false
         Menu {
             Picker("Region", selection: Binding(
                 get: { california },

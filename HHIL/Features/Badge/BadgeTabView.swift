@@ -26,6 +26,8 @@ struct BadgeTabView: View {
 
                 BadgeView(presentation: .window)
                     .frame(width: width, height: width * 2)
+                    // Inner cards round concentrically with this frame
+                    .containerShape(RoundedRectangle(cornerRadius: theme.badgeCornerRadius))
                     .clipShape(RoundedRectangle(cornerRadius: theme.badgeCornerRadius))
                     .overlay(RoundedRectangle(cornerRadius: theme.badgeCornerRadius).stroke(.white, lineWidth: 6))
                     .shadow(color: .black.opacity(0.14), radius: 20, y: 10)
