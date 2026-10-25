@@ -58,11 +58,10 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         # The Convex Rust library ships no Intel simulator slice
         "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
-        # iPhone Duo hinge API (Platform/Fold.swift) exists from the iOS 27 SDK on
-        "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphoneos27*]": $(inherited) HINGE_API
-        "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphonesimulator27*]": $(inherited) HINGE_API
-        "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphoneos28*]": $(inherited) HINGE_API
-        "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphonesimulator28*]": $(inherited) HINGE_API
+        # iPhone Duo hinge API (Platform/Fold.swift): the iOS 27.0 beta SDK
+        # (27A5218g) has no hinge symbols yet, so HINGE_API stays off. Turn it on
+        # per SDK here, e.g. "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphoneos27.1*]",
+        # once an SDK ships the API.
   # Screenshot walkthrough on the mock backend (CI: the screenshots job)
   HHILUITests:
     type: bundle.ui-testing
