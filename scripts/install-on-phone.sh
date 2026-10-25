@@ -19,24 +19,22 @@ echo "TEAM=$TEAM"
 
 xcodegen generate || exit 1
 
-# A real, paired iPhone that is reachable right now
+# Every real, paired iPhone that is reachable right now (install on all of them)
 xcrun devicectl list devices --json-output /tmp/hhil-devices.json >/dev/null
-read -r DEVICE UDID NAME <<<"$(python3 -c '
+DEVICES=("${(@f)$(python3 -c '
 import json
 d=json.load(open("/tmp/hhil-devices.json"))["result"]["devices"]
-ok=[x for x in d
-    if x["hardwareProperties"].get("reality")=="physical"
-    and x["hardwareProperties"].get("deviceType")=="iPhone"
-    and x["connectionProperties"].get("pairingState")=="paired"
-    and x["connectionProperties"].get("tunnelState")!="unavailable"]
-x=ok[0] if ok else None
-print(x["identifier"], x["hardwareProperties"]["udid"], x["deviceProperties"]["name"].replace(" ","_")) if x else print("")
-')"
-echo "DEVICE=$DEVICE UDID=$UDID NAME=$NAME"
-[ -n "$UDID" ] || { echo "NO_DEVICE: unlock the iPhone and keep it connected"; exit 1; }
+for x in d:
+    h,c=x["hardwareProperties"],x["connectionProperties"]
+    if h.get("reality")=="physical" and h.get("deviceType")=="iPhone" and c.get("pairingState")=="paired" and c.get("tunnelState")!="unavailable":
+        print(x["identifier"], h["udid"], x["deviceProperties"]["name"].replace(" ","_"))
+')}")
+[ -n "${DEVICES[1]}" ] || { echo "NO_DEVICE: unlock the iPhone and keep it connected"; exit 1; }
+for line in "${DEVICES[@]}"; do echo "DEVICE $line"; done
+FIRST_UDID=$(echo "${DEVICES[1]}" | cut -d' ' -f2)
 
 xcodebuild -project HHIL.xcodeproj -scheme HHIL -configuration Debug \
-  -destination "id=$UDID" -derivedDataPath build -allowProvisioningUpdates \
+  -destination "id=$FIRST_UDID" -derivedDataPath build -allowProvisioningUpdates \
   build > ../xcodebuild.log 2>&1
 STATUS=$?
 grep -E "error:|BUILD (SUCCEEDED|FAILED)" ../xcodebuild.log | head -30
@@ -45,6 +43,9 @@ echo "XCODEBUILD=$STATUS"
 
 APP=$(ls -d build/Build/Products/Debug-iphoneos/*.app | head -1)
 BUNDLE=$(/usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$APP/Info.plist")
-xcrun devicectl device install app --device "$DEVICE" "$APP" && \
-xcrun devicectl device process launch --device "$DEVICE" "$BUNDLE"
+for line in "${DEVICES[@]}"; do
+  DEVICE=$(echo "$line" | cut -d' ' -f1)
+  xcrun devicectl device install app --device "$DEVICE" "$APP" && \
+  xcrun devicectl device process launch --device "$DEVICE" "$BUNDLE" && echo "INSTALLED $line"
+done
 echo "DONE"
