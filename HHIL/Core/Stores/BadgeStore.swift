@@ -32,6 +32,9 @@ final class BadgeStore {
     private(set) var togetherWith: String?
     /// When the current recording actually started (nil when not recording).
     private(set) var recordingStartedAt: Date?
+    /// Smoothed microphone level while recording, 0...1, about 20 times a second.
+    private(set) var micLevel: Double = 0
+    private var meterTask: Task<Void, Never>?
 
     private let backend: Backend
     private let recorder: ConversationRecorder
@@ -247,6 +250,7 @@ final class BadgeStore {
             transcript = await recorder.stop()
         }
         recordingStartedAt = nil
+        stopMeter()
         try? await backend.finishConversation(id: id, transcript: transcript)
     }
 
@@ -258,7 +262,33 @@ final class BadgeStore {
             if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
             guard !Task.isCancelled else { return }
             await recorder.start()
-            if !Task.isCancelled, recorder.isRecording { self.recordingStartedAt = Date() }
+            if !Task.isCancelled, recorder.isRecording {
+                self.recordingStartedAt = Date()
+                self.startMeter()
+            }
         }
+    }
+
+    /// Read the recorder's level 20 times a second and smooth it: quick to
+    /// rise when someone speaks, slow to fall, so the meter breathes with voices.
+    private func startMeter() {
+        meterTask?.cancel()
+        let recorder = recorder
+        meterTask = Task {
+            while !Task.isCancelled, recorder.isRecording {
+                let target = Double(recorder.level)
+                let k = target > self.micLevel ? 0.55 : 0.18
+                let next = self.micLevel + (target - self.micLevel) * k
+                if abs(next - self.micLevel) > 0.005 { self.micLevel = next }
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            self.micLevel = 0
+        }
+    }
+
+    private func stopMeter() {
+        meterTask?.cancel()
+        meterTask = nil
+        micLevel = 0
     }
 }

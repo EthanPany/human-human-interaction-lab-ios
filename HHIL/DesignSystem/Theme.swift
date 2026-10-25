@@ -99,7 +99,7 @@ struct Theme {
     var pairWashSpeed: Double = 0.35
     /// How much of the match color the white identity card takes on at talking distance.
     var matchCardTint: Double = 0.22
-    /// The recording dot on the badge screen.
+    /// The live microphone meter in the recording pill on the badge screen.
     var recordingDot = Color(hex: "#FF3B30")
 
     /// How the badge itself is drawn (window and worn).

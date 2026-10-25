@@ -19,8 +19,12 @@ final class ConversationRecorder: @unchecked Sendable {
     private var finals: [Bool] = []
     private var rotateTask: Task<Void, Never>?
     private var recording = false
+    /// Latest microphone level, 0...1 (written by the audio tap, read by the badge meter).
+    private var rawLevel: Float = 0
 
     var isRecording: Bool { lock.withLock { recording } }
+    /// The microphone level right now, 0 (silence) ... 1 (loud speech).
+    var level: Float { lock.withLock { rawLevel } }
 
     /// Ask for microphone and speech permission (also called from onboarding).
     static func requestPermissions() async -> Bool {
@@ -51,7 +55,11 @@ final class ConversationRecorder: @unchecked Sendable {
             input.removeTap(onBus: 0)
             input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { [weak self] buffer, _ in
                 guard let self else { return }
-                let req = self.lock.withLock { self.request }
+                let level = Self.level(of: buffer)
+                let req = self.lock.withLock {
+                    self.rawLevel = level
+                    return self.request
+                }
                 req?.append(buffer)
             }
             engine.prepare()
@@ -84,6 +92,7 @@ final class ConversationRecorder: @unchecked Sendable {
             request?.endAudio()
             request = nil
             recording = false
+            rawLevel = 0
         }
         for _ in 0..<15 { // up to 1.5 s
             if lock.withLock({ finals.allSatisfy { $0 } }) { break }
@@ -101,6 +110,19 @@ final class ConversationRecorder: @unchecked Sendable {
         await MainActor.run { NotificationCenter.default.post(name: .audioSessionReleased, object: nil) }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// RMS of the first channel mapped from about -55 dB (room hush) to -10 dB
+    /// (close speech) onto 0...1. A plain loop over the samples: no allocation.
+    private static func level(of buffer: AVAudioPCMBuffer) -> Float {
+        guard let samples = buffer.floatChannelData?[0] else { return 0 }
+        let n = Int(buffer.frameLength)
+        guard n > 0 else { return 0 }
+        var sum: Float = 0
+        for i in 0..<n { sum += samples[i] * samples[i] }
+        let rms = (sum / Float(n)).squareRoot()
+        let db = 20 * log10(max(rms, 1e-7))
+        return max(0, min(1, (db + 55) / 45))
     }
 
     private func startSegment() {
