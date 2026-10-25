@@ -3,7 +3,8 @@
 # Usage: scripts/install-on-phone.sh   (logs to ../install.log)
 cd "$(dirname "$0")/.."
 exec > >(tee ../install.log) 2>&1
-export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+# System tools first: Xcode's IPA packaging breaks with Homebrew's rsync
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH:/opt/homebrew/bin:/usr/local/bin"
 # Use the Xcode app even if xcode-select points at the Command Line Tools
 if [ -z "$DEVELOPER_DIR" ]; then
   for x in /Applications/Xcode*.app; do [ -d "$x/Contents/Developer" ] && export DEVELOPER_DIR="$x/Contents/Developer"; done

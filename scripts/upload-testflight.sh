@@ -4,7 +4,8 @@
 # Apple account signed in to Xcode. Logs to ../testflight.log
 cd "$(dirname "$0")/.."
 exec > >(tee ../testflight.log) 2>&1
-export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+# System tools first: Xcode's IPA packaging breaks with Homebrew's rsync
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH:/opt/homebrew/bin:/usr/local/bin"
 if [ -z "$DEVELOPER_DIR" ]; then
   # TestFlight needs a release Xcode; prefer a non beta one when installed
   for x in /Applications/Xcode-beta.app /Applications/Xcode.app; do [ -d "$x/Contents/Developer" ] && export DEVELOPER_DIR="$x/Contents/Developer"; done
