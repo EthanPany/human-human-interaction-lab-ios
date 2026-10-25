@@ -25,7 +25,7 @@ final class HapticEngine {
     }
 
     func impact(_ kind: Impact, intensity: Double) {
-        let i = CGFloat(max(0, min(1, intensity)))
+        let i = CGFloat(max(0, min(1, intensity * Feedback.hapticGain)))
         switch kind {
         case .light: light.impactOccurred(intensity: i)
         case .soft: soft.impactOccurred(intensity: i)
@@ -45,7 +45,7 @@ final class HapticEngine {
         }
         let events = taps.map { t, i, s in
             CHHapticEvent(eventType: .hapticTransient, parameters: [
-                CHHapticEventParameter(parameterID: .hapticIntensity, value: Float(i)),
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: Float(min(1, i * Feedback.hapticGain))),
                 // Round, not clicky: keep sharpness low to match the watery sounds
                 CHHapticEventParameter(parameterID: .hapticSharpness, value: Float(s) * 0.45),
             ], relativeTime: t)

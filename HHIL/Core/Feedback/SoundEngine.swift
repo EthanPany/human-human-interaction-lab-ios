@@ -65,7 +65,11 @@ final class SoundEngine {
         guard let buffer = buffers[id], ensureRunning() else { return }
         let node = players[nextPlayer]
         nextPlayer = (nextPlayer + 1) % players.count
-        node.volume = volume
+        // The Settings level scales every cue (up to 1.8x the authored volume, capped)
+        // and the master mix, so a crowded room can still hear the badge.
+        let level = Float(Feedback.soundLevel)
+        engine.mainMixerNode.outputVolume = 0.4 + 0.6 * level
+        node.volume = min(1, volume * (0.6 + 1.2 * level))
         node.scheduleBuffer(buffer, at: nil, options: .interrupts)
         if !node.isPlaying { node.play() }
     }

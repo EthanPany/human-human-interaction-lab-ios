@@ -7,6 +7,8 @@ struct SettingsView: View {
     @State private var provider = AppConfig.backendProvider
     @AppStorage(Feedback.soundsKey) private var sounds = true
     @AppStorage(Feedback.hapticsKey) private var haptics = true
+    @AppStorage(Feedback.soundLevelKey) private var soundLevel = 1.0
+    @AppStorage(Feedback.hapticLevelKey) private var hapticLevel = 1.0
 
     var body: some View {
         let p = env.session.profile
@@ -34,8 +36,22 @@ struct SettingsView: View {
             Section {
                 Toggle("Sounds", isOn: $sounds)
                     .onChange(of: sounds) { _, on in Feedback.shared.play(.toggle(on: on)) }
+                if sounds {
+                    LabeledContent("Volume") {
+                        Slider(value: $soundLevel, in: 0...1, onEditingChanged: { editing in
+                            if !editing { Feedback.shared.play(.buttonPress) }
+                        })
+                    }
+                }
                 Toggle("Haptics", isOn: $haptics)
                     .onChange(of: haptics) { _, on in Feedback.shared.play(.toggle(on: on)) }
+                if haptics {
+                    LabeledContent("Strength") {
+                        Slider(value: $hapticLevel, in: 0...1, onEditingChanged: { editing in
+                            if !editing { Feedback.shared.play(.matchAppears) }
+                        })
+                    }
+                }
             } header: {
                 Text("Feedback")
             } footer: {

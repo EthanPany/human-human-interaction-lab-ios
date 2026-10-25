@@ -10,6 +10,14 @@ final class Feedback {
 
     static let soundsKey = "feedback.sounds"
     static let hapticsKey = "feedback.haptics"
+    /// Settings sliders, 0...1. Default all the way up: events are loud.
+    static let soundLevelKey = "feedback.soundLevel"
+    static let hapticLevelKey = "feedback.hapticLevel"
+
+    /// Sound level: 0 is quiet (40% of the old mix), 1 is the loudest the cues go.
+    static var soundLevel: Double { UserDefaults.standard.double(forKey: soundLevelKey) }
+    /// Haptic strength multiplier: 0.5x at 0, 1.6x at 1 (capped at full strength).
+    static var hapticGain: Double { 0.5 + 1.1 * UserDefaults.standard.double(forKey: hapticLevelKey) }
 
     private lazy var sound = SoundEngine()
     private let haptics = HapticEngine()
@@ -23,7 +31,8 @@ final class Feedback {
     private var lastDetent = 0
 
     private init() {
-        UserDefaults.standard.register(defaults: [Self.soundsKey: true, Self.hapticsKey: true])
+        UserDefaults.standard.register(defaults: [Self.soundsKey: true, Self.hapticsKey: true,
+                                                  Self.soundLevelKey: 1.0, Self.hapticLevelKey: 1.0])
         let center = NotificationCenter.default
         center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { Feedback.shared.suspend() }
