@@ -36,6 +36,9 @@ targets:
         NSMicrophoneUsageDescription: Records conversations so your agent can send you a summary.
         NSSpeechRecognitionUsageDescription: Transcribes conversations on your phone for your summary.
         LSApplicationQueriesSchemes: [sms]
+        # Lets Settings point at a backend on the local network over plain http
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
         # General Sans, fetched by scripts/fetch-fonts.sh (not in git, see the license)
         UIAppFonts:
           - GeneralSans-Regular.otf
@@ -43,6 +46,10 @@ targets:
           - GeneralSans-Semibold.otf
           - GeneralSans-Bold.otf
         ConvexURL: $(CONVEX_URL)
+        # convex (default) or spacetime; Settings can switch it at run time
+        BackendProvider: $(BACKEND_PROVIDER)
+        SpacetimeHost: $(SPACETIME_HOST)
+        SpacetimeDatabase: $(SPACETIME_DB)
         AgentPhone: $(AGENT_PHONE)
     settings:
       base:

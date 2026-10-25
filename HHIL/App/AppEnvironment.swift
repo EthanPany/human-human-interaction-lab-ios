@@ -12,23 +12,34 @@ final class AppEnvironment {
     let nearby: NearbyService
     let motion = MotionService()
     let usingMock: Bool
+    /// The server in use (nil for the in memory mock).
+    let provider: BackendProvider?
     /// The person you're with or met most recently (iPhone Duo opens to them).
     private(set) var currentPersonId: String?
     private var currentPersonTask: Task<Void, Never>?
 
-    init(backend: Backend, usingMock: Bool) {
+    init(backend: Backend, usingMock: Bool, provider: BackendProvider? = nil) {
         self.backend = backend
         self.usingMock = usingMock
+        self.provider = provider
         let recorder = ConversationRecorder()
         session = SessionStore(backend: backend)
         badge = BadgeStore(backend: backend, recorder: recorder)
         nearby = NearbyService(backend: backend)
     }
 
-    /// Convex when a URL is configured, otherwise the in memory mock.
+    /// The provider chosen in Settings when it is configured, otherwise the in memory mock.
     static func live() -> AppEnvironment {
-        if let url = AppConfig.convexURL {
-            return AppEnvironment(backend: ConvexBackend(url: url), usingMock: false)
+        switch AppConfig.backendProvider {
+        case .convex:
+            if let url = AppConfig.convexURL {
+                return AppEnvironment(backend: ConvexBackend(url: url), usingMock: false, provider: .convex)
+            }
+        case .spacetime:
+            if let database = AppConfig.spacetimeDatabase,
+               let backend = SpacetimeBackend(host: AppConfig.spacetimeHost, database: database) {
+                return AppEnvironment(backend: backend, usingMock: false, provider: .spacetime)
+            }
         }
         return AppEnvironment(backend: MockBackend(), usingMock: true)
     }

@@ -22,7 +22,7 @@ HHIL/
   App/            entry point, environment, root + tab view, config
   Core/
     Models/       Decodable types matching Convex query results
-    Services/     Backend protocol, ConvexBackend, MockBackend
+    Services/     Backend protocol, ConvexBackend, SpacetimeBackend (HTTP, same function names as spacetime/src/http.ts), MockBackend
     Stores/       @Observable state: session, badge, router
     Nearby/       Nearby Interaction (UWB), one NISession per peer
     Recording/    on device speech transcription of conversations
