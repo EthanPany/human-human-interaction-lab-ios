@@ -92,8 +92,6 @@ struct ProfilePatch {
     var headline: String?
     var company: String?
     var location: String?
-    var company: String?
-    var location: String?
     var tags: [String]?
     var lookingFor: String?
     var offers: String?
