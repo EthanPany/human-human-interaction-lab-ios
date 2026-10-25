@@ -71,6 +71,11 @@ struct SignInView: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .onAppear { focused = .name }
+        // Type or autofill it any way; when you leave the field it settles into
+        // one tidy format, e.g. (585) 210-6589.
+        .onChange(of: focused) { old, _ in
+            if old == .phone, let e164 = normalizedPhone { phone = PhoneNumber.field(e164) }
+        }
         .toolbar {
             // The phone pad has no Return key
             ToolbarItemGroup(placement: .keyboard) {
