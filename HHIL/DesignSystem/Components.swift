@@ -266,6 +266,8 @@ struct LabeledField: View {
             }
             .font(theme.body)
             .foregroundStyle(theme.strongInk)
+            // UI tests find fields by their title (the label can be the prompt)
+            .accessibilityIdentifier(title)
             .padding(14)
             .background(theme.surfaceMuted, in: RoundedRectangle(cornerRadius: 14))
             if let footnote {

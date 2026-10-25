@@ -17,5 +17,8 @@ for test in manifest:
         human = a.get("suggestedHumanReadableName") or a["exportedFileName"]
         # "01-sign-in_0_<UUID>.png" -> "01-sign-in.png"
         name = re.sub(r"_\d+_[0-9A-Fa-f-]{36}", "", os.path.splitext(human)[0])
+        # Failure attachments carry names like `"Phone number" TextField`; the
+        # artifact upload rejects quotes, colons and the like in file names.
+        name = re.sub(r'[\\/:*?"<>|\r\n`]+', "_", name).strip(" _") or "attachment"
         shutil.copy(src, os.path.join(out, name + os.path.splitext(src)[1]))
         print(os.path.join(out, name))
