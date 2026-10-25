@@ -27,8 +27,11 @@ import json
 d=json.load(open("/tmp/hhil-devices.json"))["result"]["devices"]
 for x in d:
     h,c=x["hardwareProperties"],x["connectionProperties"]
-    if h.get("reality")=="physical" and h.get("deviceType")=="iPhone" and c.get("pairingState")=="paired" and c.get("tunnelState")!="unavailable":
-        print(x["identifier"], h["udid"], x["deviceProperties"]["name"].replace(" ","_"))
+    # A plugged in phone can read "disconnected" until something talks to it;
+    # devicectl connects on demand, so wired or network phones count too.
+    real = h.get("reality")=="physical" or c.get("transportType") in ("wired","localNetwork")
+    if real and h.get("reality")!="simulated" and h.get("deviceType","iPhone")=="iPhone" and c.get("pairingState")=="paired" and c.get("tunnelState")!="unavailable":
+        print(x["identifier"], h.get("udid", x["identifier"]), x["deviceProperties"]["name"].replace(" ","_"))
 ')}")
 if [ -z "${DEVICES[1]}" ]; then
   echo "NO_DEVICE: unlock the iPhone and keep it connected. Phones seen:"
@@ -41,10 +44,9 @@ for x in json.load(open("/tmp/hhil-devices.json"))["result"]["devices"]:
   exit 1
 fi
 for line in "${DEVICES[@]}"; do echo "DEVICE $line"; done
-FIRST_UDID=$(echo "${DEVICES[1]}" | cut -d' ' -f2)
 
 xcodebuild -project HHIL.xcodeproj -scheme HHIL -configuration Debug \
-  -destination "id=$FIRST_UDID" -derivedDataPath build -allowProvisioningUpdates \
+  -destination "generic/platform=iOS" -derivedDataPath build -allowProvisioningUpdates \
   build > ../xcodebuild.log 2>&1
 STATUS=$?
 grep -E "error:|BUILD (SUCCEEDED|FAILED)" ../xcodebuild.log | head -30
