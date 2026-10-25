@@ -110,6 +110,10 @@ final class SpacetimeBackend: Backend, @unchecked Sendable {
         try await send("nearby:reportDistance", ["userId": userId, "peerId": peerId, "meters": meters])
     }
 
+    func setRanging(userId: String, on: Bool) async throws {
+        try await send("nearby:setRanging", ["userId": userId, "on": on])
+    }
+
     func finishConversation(id: String, transcript: String?) async throws {
         try await send("conversations:finish", ["conversationId": id, "transcript": transcript])
     }

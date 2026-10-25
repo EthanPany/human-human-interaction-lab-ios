@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct HHILApp: App {
     @State private var env = AppEnvironment.live()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -18,6 +19,13 @@ struct HHILApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: .backendProviderChanged)) { _ in
                     env = AppEnvironment.live()
                 }
+                // UWB runs only while the badge is worn full screen with the app in front
+                .onChange(of: env.badge.isWorn, initial: true) { _, _ in updateRanging() }
+                .onChange(of: scenePhase) { _, _ in updateRanging() }
         }
+    }
+
+    private func updateRanging() {
+        env.nearby.setActive(env.badge.isWorn && scenePhase == .active)
     }
 }

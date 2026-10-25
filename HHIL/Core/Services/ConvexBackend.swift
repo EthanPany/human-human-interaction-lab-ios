@@ -116,6 +116,12 @@ final class ConvexBackend: Backend {
         ])
     }
 
+    func setRanging(userId: String, on: Bool) async throws {
+        let _: String? = try await client.mutation("nearby:setRanging", with: [
+            "userId": userId, "on": on,
+        ])
+    }
+
     func finishConversation(id: String, transcript: String?) async throws {
         let _: String? = try await client.mutation("conversations:finish", with: compact([
             "conversationId": id, "transcript": transcript,

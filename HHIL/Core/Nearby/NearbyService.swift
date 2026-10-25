@@ -2,7 +2,11 @@ import Foundation
 import NearbyInteraction
 import Observation
 
-/// UWB ranging with everyone at the event whose app is open.
+/// UWB ranging with everyone at the event whose badge is worn full screen.
+///
+/// Ranging only runs while this badge is worn full screen and the app is in
+/// front (`setActive`). Taking it off, minimizing or closing the app tells the
+/// server at once, which drops our distances so the other badge lets go too.
 ///
 /// Every NISession has its own discovery token, so we keep one session per
 /// peer: publish that session's token for the peer, and start ranging once the
@@ -35,7 +39,7 @@ final class NearbyService: NSObject {
 
         var label: String {
             switch self {
-            case .idle: return "Not started"
+            case .idle: return "Off. Wear the badge full screen to range"
             case .unsupported: return "This iPhone has no Ultra Wideband chip"
             case .ranging: return "Ranging"
             case .permissionDenied: return "Nearby Interaction is off for this app (Settings > Privacy > Nearby Interactions)"
@@ -59,6 +63,8 @@ final class NearbyService: NSObject {
     @ObservationIgnored private var smoothed: [String: Double] = [:]
     @ObservationIgnored private var lastPeers: [Peer] = []
     @ObservationIgnored private var restarts: [String: [Date]] = [:]
+    /// Badge worn full screen with the app in front.
+    @ObservationIgnored private var active = false
 
     init(backend: Backend) {
         self.backend = backend
@@ -76,25 +82,59 @@ final class NearbyService: NSObject {
         return false
     }
 
+    /// Signed in: remember who we are. Ranging waits for `setActive(true)`.
     func start(userId: String) {
         guard Self.isSupported else {
             status = .unsupported
             return
         }
+        if self.userId != userId { stop() }
         self.userId = userId
+        if active { begin() }
+    }
+
+    /// Signed out.
+    func stop() {
+        if active, let userId { Task { [backend] in try? await backend.setRanging(userId: userId, on: false) } }
+        tearDown()
+        userId = nil
+    }
+
+    /// Badge worn full screen and the app in front (true), or not (false).
+    func setActive(_ on: Bool) {
+        guard on != active else { return }
+        active = on
+        guard Self.isSupported, let userId else { return }
+        if on {
+            begin()
+        } else {
+            tearDown()
+            Task { [backend] in try? await backend.setRanging(userId: userId, on: false) }
+        }
+    }
+
+    private func begin() {
+        guard let userId else { return }
         status = .ranging
         peersTask?.cancel()
         peersTask = Task { [backend] in
             do {
-                for try await peers in backend.peers(userId: userId) { self.sync(peers) }
+                // Tell the server first, so peers includes us on the other phone.
+                try await backend.setRanging(userId: userId, on: true)
+                for try await peers in backend.peers(userId: userId) {
+                    guard self.active else { return }
+                    self.sync(peers)
+                }
+            } catch is CancellationError {
             } catch {
                 self.status = .error("Peer list stopped: \(error.localizedDescription)")
             }
         }
     }
 
-    func stop() {
+    private func tearDown() {
         peersTask?.cancel()
+        peersTask = nil
         lastPeers = []
         sessions.values.forEach { $0.invalidate() }
         sessions.removeAll()
@@ -102,19 +142,20 @@ final class NearbyService: NSObject {
         directions.removeAll()
         diagnostics.removeAll()
         smoothed.removeAll()
+        lastReport.removeAll()
         if status == .ranging { status = .idle }
     }
 
     /// Start over from scratch (debug panel button, or after granting permission).
     func reset() {
-        guard let userId else { return }
-        stop()
+        guard userId != nil else { return }
+        tearDown()
         restarts.removeAll()
-        start(userId: userId)
+        if active { begin() }
     }
 
     private func sync(_ peers: [Peer]) {
-        guard let userId, status != .permissionDenied else { return }
+        guard let userId, active, status != .permissionDenied else { return }
         lastPeers = peers
         let ids = Set(peers.map(\.userId))
 
@@ -179,19 +220,20 @@ final class NearbyService: NSObject {
             let x = Double(max(-1, min(1, direction.x)))
             if abs((directions[peerId] ?? 0) - x) > 0.05 { directions[peerId] = x }
         }
-        // Light smoothing: UWB readings jitter by 10 to 30 cm
+        // Light smoothing: UWB readings jitter by 10 to 30 cm. Big jumps (walking
+        // up fast) follow quickly so "together" shows the moment it happens.
         let raw = Double(distance)
-        let value = smoothed[peerId].map { $0 * 0.6 + raw * 0.4 } ?? raw
+        let value = smoothed[peerId].map { abs(raw - $0) > 1 ? $0 * 0.3 + raw * 0.7 : $0 * 0.6 + raw * 0.4 } ?? raw
         smoothed[peerId] = value
         diagnostics[peerId]?.meters = value
         diagnostics[peerId]?.updatedAt = Date()
         onDistance?(peerId, value)
 
-        // Twice a second, or right away on a big change
+        // Four times a second, or right away on a real change
         let now = Date()
         if let last = lastReport[peerId],
-           now.timeIntervalSince(last.at) < 0.5,
-           abs(last.meters - value) < 0.75 { return }
+           now.timeIntervalSince(last.at) < 0.25,
+           abs(last.meters - value) < 0.3 { return }
         lastReport[peerId] = (now, value)
         Task { [backend] in
             do {
@@ -266,6 +308,10 @@ extension NearbyService: NISessionDelegate {
         Task { @MainActor in
             guard let peerId = self.peerId(for: session) else { return }
             self.diagnostics[peerId]?.lastError = reason == .timeout ? "Out of range" : "They stopped ranging"
+            // Forget the distance at once, so our badge lets go of them now.
+            self.diagnostics[peerId]?.meters = nil
+            self.smoothed[peerId] = nil
+            self.directions[peerId] = nil
             if reason == .peerEnded { self.restart(session) }
         }
     }

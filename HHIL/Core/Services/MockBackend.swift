@@ -93,6 +93,7 @@ final class MockBackend: Backend {
     func peers(userId: String) -> AsyncThrowingStream<[Peer], Error> { once([]) }
     func uploadToken(userId: String, peerId: String, token: String) async throws {}
     func reportDistance(userId: String, peerId: String, meters: Double) async throws {}
+    func setRanging(userId: String, on: Bool) async throws {}
     func finishConversation(id: String, transcript: String?) async throws {}
 
     func people(userId: String) -> AsyncThrowingStream<[PersonSummary], Error> { once(Self.people) }

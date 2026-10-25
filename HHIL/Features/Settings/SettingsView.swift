@@ -102,7 +102,7 @@ private struct NearbySection: View {
             LabeledContent("Status", value: nearby.status.label)
             LabeledContent("Range", value: nearby.extendedRange ? "Extended UWB" : "Standard UWB")
             if nearby.diagnostics.isEmpty {
-                Text("No other phones with the app open right now. Open the app on the other phone, signed in as a different person.")
+                Text("No other badges worn right now. Ranging runs only while badges are worn full screen, on both phones, signed in as different people.")
                     .font(theme.caption)
                     .foregroundStyle(theme.inkSecondary)
             }
@@ -124,7 +124,7 @@ private struct NearbySection: View {
         } header: {
             Text("Nearby (UWB)")
         } footer: {
-            Text("A match starts to show within 10 m and is at full strength within 3 m. Both phones need the app open and must be signed in as different people.")
+            Text("A match starts to show within 10 m and you are together within 3 m. Ranging runs only while the badge is worn full screen; taking it off or leaving the app stops it on both phones at once.")
         }
     }
 

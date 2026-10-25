@@ -22,6 +22,8 @@ protocol Backend: AnyObject {
     func peers(userId: String) -> AsyncThrowingStream<[Peer], Error>
     func uploadToken(userId: String, peerId: String, token: String) async throws
     func reportDistance(userId: String, peerId: String, meters: Double) async throws
+    /// The badge is worn full screen (UWB on) or not; off drops my distances at once.
+    func setRanging(userId: String, on: Bool) async throws
     func finishConversation(id: String, transcript: String?) async throws
 
     // People (CRM)
