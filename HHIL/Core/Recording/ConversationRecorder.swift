@@ -14,8 +14,9 @@ final class ConversationRecorder: @unchecked Sendable {
 
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
-    private var finishedSegments: [String] = []
-    private var currentSegment = ""
+    /// One entry per recognition request; callbacks write only their own slot.
+    private var segments: [String] = []
+    private var finals: [Bool] = []
     private var rotateTask: Task<Void, Never>?
     private var recording = false
 
@@ -30,16 +31,19 @@ final class ConversationRecorder: @unchecked Sendable {
         return speech && mic
     }
 
+    /// Starts recording. If the calling task is cancelled while permissions or
+    /// audio setup are pending, it gives up instead of leaving the mic on.
     func start() async {
         guard !isRecording, await Self.requestPermissions(), recognizer?.isAvailable == true else { return }
+        guard !Task.isCancelled else { return }
         do {
             let audio = AVAudioSession.sharedInstance()
             try audio.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker])
             try audio.setActive(true, options: .notifyOthersOnDeactivation)
 
             lock.withLock {
-                finishedSegments = []
-                currentSegment = ""
+                segments = []
+                finals = []
             }
             startSegment()
 
@@ -75,13 +79,20 @@ final class ConversationRecorder: @unchecked Sendable {
             engine.stop()
             engine.inputNode.removeTap(onBus: 0)
         }
-        let text: String = lock.withLock {
+        // End the audio but let the recognizer deliver its final result.
+        lock.withLock {
             request?.endAudio()
-            task?.finish()
             request = nil
-            task = nil
             recording = false
-            return (finishedSegments + [currentSegment]).joined(separator: " ")
+        }
+        for _ in 0..<15 { // up to 1.5 s
+            if lock.withLock({ finals.allSatisfy { $0 } }) { break }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        let text: String = lock.withLock {
+            task?.cancel()
+            task = nil
+            return segments.joined(separator: " ")
         }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -94,9 +105,18 @@ final class ConversationRecorder: @unchecked Sendable {
         if recognizer?.supportsOnDeviceRecognition == true {
             request.requiresOnDeviceRecognition = true
         }
-        let task = recognizer?.recognitionTask(with: request) { [weak self] result, _ in
-            guard let self, let text = result?.bestTranscription.formattedString else { return }
-            self.lock.withLock { self.currentSegment = text }
+        let index: Int = lock.withLock {
+            segments.append("")
+            finals.append(false)
+            return segments.count - 1
+        }
+        let task = recognizer?.recognitionTask(with: request) { [weak self] result, error in
+            guard let self else { return }
+            self.lock.withLock {
+                guard index < self.segments.count else { return }
+                if let text = result?.bestTranscription.formattedString { self.segments[index] = text }
+                if result?.isFinal == true || error != nil { self.finals[index] = true }
+            }
         }
         lock.withLock {
             self.request = request
@@ -106,12 +126,8 @@ final class ConversationRecorder: @unchecked Sendable {
 
     private func rotateSegment() {
         guard isRecording else { return }
-        lock.withLock {
-            request?.endAudio()
-            task?.finish()
-            if !currentSegment.isEmpty { finishedSegments.append(currentSegment) }
-            currentSegment = ""
-        }
+        // End the old request (its final result still lands in its own slot)
+        lock.withLock { request?.endAudio() }
         startSegment()
     }
 }

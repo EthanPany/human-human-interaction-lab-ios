@@ -30,9 +30,6 @@ struct BadgeState: Decodable {
         peerId == nil ? nil : AvatarStyle(shape: peerAvatarShape, color: peerAvatarColor)
     }
 
-    /// The two avatars have met: they share one frame.
-    var hasMet: Bool { mode == .talking || mode == .connected }
-
     init(mode: BadgeMode, glow: Double, color: String?, frontTag: String?, peerId: String?,
          peerName: String?, peerAvatarShape: String?, peerAvatarColor: String?, closeness: Double,
          conversationId: String?, recordConversations: Bool, californiaMode: Bool) {

@@ -14,6 +14,8 @@ struct BadgeConfiguration {
     var layout: BadgeLayout
     var photoURL: URL?
     var avatar: AvatarStyle
+    /// Per person seed so two phones' avatars never blink in sync.
+    var seed: Int
     var hasProfile: Bool
 
     /// Badge tags and hobbies in one list, front tag first.
@@ -29,11 +31,13 @@ struct BadgeConfiguration {
     var closeness: Double
     /// Shared match color (same on both badges), nil when idle.
     var matchColor: Color?
-    var peerName: String?
     var peerAvatar: AvatarStyle?
     var peerSeed: Int
-    /// Where my avatar should look (-1...1), nil to wander.
+    /// Where my avatar should look (-1...1) when UWB knows the match's direction.
     var look: CGPoint?
+    /// With nobody near, the eyes follow the phone's tilt (read inside the avatar
+    /// so tilt updates don't rebuild the whole badge).
+    var followsTilt: Bool
 
     var presentation: Presentation
     var orientation: Orientation

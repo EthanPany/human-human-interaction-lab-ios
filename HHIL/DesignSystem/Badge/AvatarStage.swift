@@ -8,12 +8,21 @@ struct AvatarStage: View {
     var color: Color
     var expression: AvatarExpression
     var look: CGPoint?
+    var followsTilt = false
     var seed: Int
     var peer: AvatarStyle?
     var peerSeed: Int
     var hasMet: Bool
     /// Which side the peer comes from (-1 left, 1 right), from UWB direction.
     var peerSide: Double = 1
+
+    @Environment(MotionService.self) private var motion
+
+    private var myLook: CGPoint? {
+        if hasMet { return CGPoint(x: peerSide, y: 0) }
+        if let look { return look }
+        return followsTilt ? CGPoint(x: motion.tiltX, y: motion.tiltY * 0.6) : nil
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -23,7 +32,7 @@ struct AvatarStage: View {
                     shape: avatar.shape,
                     color: color,
                     expression: expression,
-                    look: hasMet ? CGPoint(x: peerSide, y: 0) : look,
+                    look: myLook,
                     seed: seed
                 )
                 .frame(width: hasMet ? size * 0.72 : size, height: hasMet ? size * 0.72 : size)

@@ -47,7 +47,9 @@ final class AvatarEngine {
 
         // 1. Shape morph
         if shape != shapeTo {
-            shapeFrom = currentBlendShape(at: t)
+            // Interrupted mid morph: start from whichever shape we were closer to.
+            let progress = (t - morphStart) / 0.7
+            shapeFrom = progress < 0.5 ? shapeFrom : shapeTo
             shapeTo = shape
             morphStart = t
         }
@@ -108,11 +110,6 @@ final class AvatarEngine {
             squash: squash,
             breathe: 1 + 0.018 * sin(t * 1.7)
         )
-    }
-
-    private func currentBlendShape(at t: Double) -> AvatarShapeKind {
-        // Interrupting a morph restarts from the shape we were heading to.
-        shapeTo
     }
 
     /// Overshoots a little before settling: reads as squishy.

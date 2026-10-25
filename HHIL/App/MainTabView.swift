@@ -20,6 +20,7 @@ struct MainTabView: View {
             }
         }
         .tabViewStyle(.tabBarOnly)
+        .recordingConsent(isActive: !env.badge.isWorn)
         .sheet(isPresented: .constant(!didChooseSetup)) {
             SetupChoiceView { didChooseSetup = true }
                 .interactiveDismissDisabled()

@@ -171,6 +171,7 @@ struct ProfileView: View {
             layout: p?.layout ?? .avatar,
             photoURL: p?.photoURL,
             avatar: p?.avatar ?? AvatarStyle(shape: nil, color: nil),
+            seed: AvatarStyle.seed(p?.id ?? "me"),
             hasProfile: p?.isMatchable ?? false,
             interests: [],
             tags: p?.badgeTags ?? [],
@@ -179,10 +180,10 @@ struct ProfileView: View {
             mode: .idle,
             closeness: 0,
             matchColor: nil,
-            peerName: nil,
             peerAvatar: nil,
             peerSeed: 0,
             look: nil,
+            followsTilt: true,
             presentation: .window,
             orientation: .vertical
         )

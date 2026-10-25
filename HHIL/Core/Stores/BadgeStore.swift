@@ -17,7 +17,8 @@ final class BadgeStore {
     private var task: Task<Void, Never>?
     /// The conversation the server says we are in (recorded or not).
     private var activeConversationId: String?
-    private var isRecordingActive = false
+    /// The task starting the recorder; cancelled if the talk ends first.
+    private var recordingTask: Task<Void, Never>?
 
     init(backend: Backend, recorder: ConversationRecorder) {
         self.backend = backend
@@ -35,9 +36,15 @@ final class BadgeStore {
         }
     }
 
+    /// Sign out: stop listening, and close any conversation in progress.
     func stop() {
         task?.cancel()
         state = .idle
+        pendingConsentConversationId = nil
+        if let id = activeConversationId {
+            activeConversationId = nil
+            Task { await self.finish(id) }
+        }
     }
 
     func wear() { isWorn = true }
@@ -72,18 +79,24 @@ final class BadgeStore {
         if new.mode != .talking, let id = activeConversationId {
             activeConversationId = nil
             pendingConsentConversationId = nil
-            var transcript: String?
-            if isRecordingActive {
-                isRecordingActive = false
-                transcript = await recorder.stop()
-            }
-            try? await backend.finishConversation(id: id, transcript: transcript)
+            await finish(id)
         }
     }
 
+    /// Stop recording (if any), upload the transcript, trigger follow ups.
+    private func finish(_ id: String) async {
+        var transcript: String?
+        if let starting = recordingTask {
+            recordingTask = nil
+            starting.cancel()
+            await starting.value // start() gives up or completes before we stop
+            transcript = await recorder.stop()
+        }
+        try? await backend.finishConversation(id: id, transcript: transcript)
+    }
+
     private func startRecording() {
-        isRecordingActive = true
         let recorder = recorder
-        Task { await recorder.start() }
+        recordingTask = Task { await recorder.start() }
     }
 }

@@ -161,12 +161,12 @@ struct AvatarEditorView: View {
     // MARK: Actions
 
     private func load() {
+        defer { DispatchQueue.main.async { loaded = true } }
         guard let p = env.session.profile else { return }
         shape = p.avatar.shape
         colorHex = p.avatar.colorHex
         customColor = p.avatar.color
         layout = p.layout
-        DispatchQueue.main.async { loaded = true }
     }
 
     private func pick(_ hex: String) {

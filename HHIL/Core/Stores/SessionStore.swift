@@ -103,9 +103,14 @@ final class SessionStore {
                     self.profile = p
                 }
             } catch {
-                // An id from another deployment fails validation: start over too.
+                // An id from another deployment fails argument validation: start
+                // over. Anything else (network, server hiccup) keeps you signed in.
                 print("profile stream failed:", error)
-                self.signOut()
+                if "\(error)".localizedCaseInsensitiveContains("validat") {
+                    self.signOut()
+                } else {
+                    self.lastError = error.localizedDescription
+                }
             }
         }
         momentsTask?.cancel()

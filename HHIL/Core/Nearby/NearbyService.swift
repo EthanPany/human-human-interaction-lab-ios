@@ -21,6 +21,7 @@ final class NearbyService: NSObject {
     @ObservationIgnored private var sessions: [String: NISession] = [:] // peerId -> session
     @ObservationIgnored private var runningWith: [String: String] = [:] // peerId -> peer token we run with
     @ObservationIgnored private var lastReport: [String: Date] = [:]
+    @ObservationIgnored private var lastPeers: [Peer] = []
 
     init(backend: Backend) {
         self.backend = backend
@@ -48,6 +49,7 @@ final class NearbyService: NSObject {
 
     func stop() {
         peersTask?.cancel()
+        lastPeers = []
         sessions.values.forEach { $0.invalidate() }
         sessions.removeAll()
         runningWith.removeAll()
@@ -56,6 +58,7 @@ final class NearbyService: NSObject {
 
     private func sync(_ peers: [Peer]) {
         guard let userId else { return }
+        lastPeers = peers
         let ids = Set(peers.map(\.userId))
 
         // Drop sessions for people who left
@@ -103,9 +106,13 @@ final class NearbyService: NSObject {
 
     fileprivate func restart(_ session: NISession) {
         guard let peerId = peerId(for: session) else { return }
+        session.invalidate()
         sessions[peerId] = nil
         runningWith[peerId] = nil
-        // The next peers update recreates the session and republishes its token.
+        directions[peerId] = nil
+        // Recreate the session now and republish its token; the peer list
+        // itself may not change for a long time.
+        sync(lastPeers)
     }
 
     // MARK: Token coding
