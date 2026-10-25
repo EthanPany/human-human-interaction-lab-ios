@@ -255,6 +255,9 @@ final class BadgeStore {
     }
 
     private func startRecording() {
+        #if DEBUG
+        if DemoReel.isOn { startDemoRecording(); return }
+        #endif
         let recorder = recorder
         // The meet sound plays on the speaker; let it ring out before the mic takes the session.
         let wait = max(0, 1.8 - Date().timeIntervalSince(lastMeetAt))
@@ -285,6 +288,33 @@ final class BadgeStore {
             self.micLevel = 0
         }
     }
+
+    #if DEBUG
+    /// Demo reel: no microphone. Shows the recording pill with a meter that
+    /// moves like two people talking.
+    private func startDemoRecording() {
+        let wait = max(0, 1.8 - Date().timeIntervalSince(lastMeetAt))
+        recordingTask = Task {
+            if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+            guard !Task.isCancelled else { return }
+            self.recordingStartedAt = Date()
+            self.meterTask?.cancel()
+            self.meterTask = Task {
+                let start = Date()
+                while !Task.isCancelled {
+                    let t = Date().timeIntervalSince(start)
+                    let syllables = 0.5 + 0.5 * sin(t * 9.1) * sin(t * 3.7 + 1)
+                    let phrase = max(0, sin(t * 0.9) + 0.35)
+                    let target = min(1, max(0, syllables * phrase * 0.9 + 0.08 * sin(t * 23)))
+                    let k = target > self.micLevel ? 0.55 : 0.18
+                    self.micLevel += (target - self.micLevel) * k
+                    try? await Task.sleep(for: .milliseconds(50))
+                }
+                self.micLevel = 0
+            }
+        }
+    }
+    #endif
 
     private func stopMeter() {
         meterTask?.cancel()
