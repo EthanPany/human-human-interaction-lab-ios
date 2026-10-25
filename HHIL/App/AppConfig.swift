@@ -43,8 +43,13 @@ enum AppConfig {
         NotificationCenter.default.post(name: .backendProviderChanged, object: nil)
     }
 
-    /// The agent's iMessage number, used by "Text your agent".
-    static var agentPhone: String? { plistValue("AgentPhone") }
+    /// The agent's iMessage line on Photon (shared pool). Testers must be added
+    /// to the line in the Photon dashboard, then their texts arrive as blue
+    /// bubbles. AGENT_PHONE in Secrets.xcconfig overrides it.
+    static let photonLine = "+16289988199"
+    static var agentPhone: String? {
+        plistValue("AgentPhone").flatMap { $0.contains("5555550123") ? nil : $0 } ?? photonLine
+    }
 
     /// Opens Messages with the agent, optionally with a first message.
     static func agentSMSURL(body: String? = nil) -> URL? {
