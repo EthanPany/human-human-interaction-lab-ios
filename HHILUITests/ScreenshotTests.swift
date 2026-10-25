@@ -24,22 +24,22 @@ final class ScreenshotTests: XCTestCase {
         sleep(2)
         snap("01-sign-in")
 
-        phone.tap()
-        phone.typeText("5555550100")
         let name = app.textFields["Name"]
         if name.exists { name.tap(); name.typeText("Alexandria Montgomery") }
+        phone.tap()
+        phone.typeText("5555550100")
         snap("02-sign-in-filled")
 
-        // Submit from the password field: on iPad the keyboard covers Continue
-        let password = app.secureTextFields["Password"]
-        if password.exists {
+        // Submit with Return from the password field (on iPad the keyboard
+        // covers Continue). The phone pad's toolbar Next moves focus there.
+        let next = app.buttons["Next"].firstMatch
+        if next.exists {
+            next.tap()
+            app.typeText("\n")
+        } else {
+            let password = app.secureTextFields["Password"]
             password.tap()
             password.typeText("\n")
-        }
-        let continueButton = app.buttons["Continue"]
-        if app.textFields["Phone number"].exists && continueButton.exists {
-            if !continueButton.isHittable { app.swipeUp() }
-            continueButton.tap()
         }
 
         // Step 2: the avatar

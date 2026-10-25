@@ -15,25 +15,6 @@ enum BrandFont {
     }
 
     static let isAvailable = UIFont(name: "GeneralSans-Regular", size: 12) != nil
-
-    /// The UIKit font behind `Font.brandFixed`, for measuring text before drawing it.
-    static func uiFont(_ size: CGFloat, _ weight: Font.Weight) -> UIFont {
-        if isAvailable, let font = UIFont(name: name(for: weight), size: size) { return font }
-        let system: UIFont.Weight
-        switch weight {
-        case .bold, .heavy, .black: system = .bold
-        case .semibold: system = .semibold
-        case .medium: system = .medium
-        default: system = .regular
-        }
-        return .systemFont(ofSize: size, weight: system)
-    }
-
-    /// How wide one line of text is in the brand font, with the given tracking.
-    static func width(of text: String, size: CGFloat, weight: Font.Weight, tracking: CGFloat = 0) -> CGFloat {
-        let attributes: [NSAttributedString.Key: Any] = [.font: uiFont(size, weight), .kern: tracking]
-        return ceil((text as NSString).size(withAttributes: attributes).width)
-    }
 }
 
 extension Font {

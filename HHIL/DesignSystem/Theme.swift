@@ -69,9 +69,6 @@ struct Theme {
     /// The name on the identity card: first name biggest, the rest of the name
     /// a step down and pulled up close under it, both tracked a little tight.
     var nameLastRatio: CGFloat = 0.64
-    /// Below this last to first ratio the first name shrinks too, so a very
-    /// long last name never ends up tiny under a huge first name.
-    var nameLastMinRatio: CGFloat = 0.48
     /// Space between the two name lines, in first name ems (negative pulls them together).
     var nameLineGap: CGFloat = -0.12
     /// Letter spacing of the name, in ems.
