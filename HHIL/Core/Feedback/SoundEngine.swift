@@ -12,7 +12,6 @@ final class SoundEngine {
     private var buffers: [SoundID: AVAudioPCMBuffer] = [:]
     let squish = SquishVoice()
     private var sessionReady = false
-    private var idleStop: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
 
     init() {
@@ -39,12 +38,17 @@ final class SoundEngine {
             MainActor.assumeIsolated {
                 self.players.forEach { $0.stop() }
                 self.sessionReady = false
+                _ = self.ensureRunning() // a new route: come straight back up
             }
         })
         observers.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { self.sessionReady = false }
         })
     }
+
+    /// Bring the audio hardware up ahead of the first sound (app launch and
+    /// foreground), so short cues are never swallowed by a cold start.
+    func warmUp() { _ = ensureRunning() }
 
     func play(_ id: SoundID, volume: Float = 1) {
         guard let buffer = buffers[id], ensureRunning() else { return }
@@ -62,9 +66,10 @@ final class SoundEngine {
 
     func stopSquish() { squish.set(stretch: 0, motion: 0) }
 
-    /// Stop the audio hardware when quiet, and on background.
+    /// Stop the audio hardware in the background. While the app is active the
+    /// engine stays up: restarting it on demand dropped short cues (the first
+    /// tap after a pause was silent while the output woke up).
     func suspend() {
-        idleStop?.cancel()
         squish.set(stretch: 0, motion: 0)
         if engine.isRunning { engine.stop() }
     }
@@ -87,17 +92,7 @@ final class SoundEngine {
             engine.prepare()
             do { try engine.start() } catch { return false }
         }
-        scheduleIdleStop()
         return true
-    }
-
-    private func scheduleIdleStop() {
-        idleStop?.cancel()
-        idleStop = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(8))
-            guard !Task.isCancelled, let self, !self.squish.isActive else { return }
-            if self.engine.isRunning { self.engine.stop() }
-        }
     }
 }
 

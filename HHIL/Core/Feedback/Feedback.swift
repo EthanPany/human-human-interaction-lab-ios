@@ -28,6 +28,9 @@ final class Feedback {
         center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { Feedback.shared.suspend() }
         }
+        center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { Feedback.shared.prepare() }
+        }
     }
 
     var soundsOn: Bool { UserDefaults.standard.bool(forKey: Self.soundsKey) }
@@ -36,7 +39,7 @@ final class Feedback {
     /// Warm up the haptic generators (and render the sounds) before the first touch.
     func prepare() {
         if hapticsOn { haptics.prepare() }
-        if soundsOn { _ = sound }
+        if soundsOn { sound.warmUp() }
     }
 
     func play(_ cue: FeedbackCue) {
