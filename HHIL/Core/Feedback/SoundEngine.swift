@@ -17,7 +17,7 @@ final class SoundEngine {
     init() {
         format = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1)!
         var ids: [SoundID] = [.tap, .press, .tab, .toggleOn, .toggleOff, .wear, .takeOff, .poke, .pop, .land,
-                              .boingSmall, .boingBig, .chime, .talk, .celebrate, .error]
+                              .boingSmall, .boingBig, .chime, .met, .talk, .celebrate, .error]
         ids += (0..<SoundID.tickSteps).map { SoundID.tick($0) }
         for id in ids { buffers[id] = ToneSynth.render(id, format: format) }
 

@@ -39,9 +39,14 @@ enum ToneSynth {
         var vibrato: (rate: Double, depth: Double, decay: Double)? = nil
         /// Slow amplitude ripple (rate Hz, depth 0...1): liquid movement.
         var tremolo: (rate: Double, depth: Double)? = nil
+        /// Level of soft, dark noise under the note (a watery wash), shaped by
+        /// the same envelope and filtered low before the master low pass.
+        var noise: Double = 0
+        var noiseCutoff: Double = 420
     }
 
     // D major pentatonic, low and warm
+    static let D2 = 73.42, A2 = 110.0
     static let D3 = 146.83, E3 = 164.81, Fs3 = 185.0, A3 = 220.0, B3 = 246.94
     static let D4 = 293.66, E4 = 329.63, Fs4 = 369.99, A4 = 440.0, B4 = 493.88, D5 = 587.33
 
@@ -120,6 +125,24 @@ enum ToneSynth {
                 Note(start: 0.17, freq: f * 0.9, from: f * 1.1, glide: 0.02, attack: 0.012, decay: 0.08,
                      amp: 0.6, partials: warm, sub: 0.6),
             ], 0.5, 0.22 + 0.08 * x, 700 + 400 * x)
+        case .met:
+            // We finally met: a stone dropping into a lake. A low, soft thump
+            // that sinks, then a dark wash that spreads and settles, with a few
+            // slow ripples drifting outward. Relief, not a fanfare.
+            return ([
+                // The stone: a round low hit, falling a little as it lands
+                Note(freq: D2, from: A2, glide: 0.06, attack: 0.014, decay: 0.28, partials: warm, sub: 0.35),
+                // Its body on small speakers
+                Note(freq: D3, from: Fs3, glide: 0.07, attack: 0.02, decay: 0.32, amp: 0.45, partials: warm, sub: 0.5),
+                // The water closing over it: a slow swell of low noise and a soft fifth
+                Note(start: 0.04, freq: A2, attack: 0.3, decay: 0.85, amp: 0.4,
+                     partials: [(1, 0.35), (1.5, 0.18), (2, 0.1)], sub: 0.2, tremolo: (3.2, 0.35),
+                     noise: 1.4, noiseCutoff: 380),
+                // Ripples spreading out: each one later, lower and quieter
+                drop(0.2, A3, amp: 0.3, decay: 0.22),
+                drop(0.42, Fs3, amp: 0.22, decay: 0.28),
+                drop(0.7, D3, amp: 0.15, decay: 0.36),
+            ], 2.1, 0.3, 950)
         case .talk:
             return ([
                 Note(freq: D3, attack: 0.06, decay: 0.3, amp: 0.6, partials: warm, sub: 0.4, tremolo: (5, 0.25)),
@@ -158,6 +181,10 @@ enum ToneSynth {
             let first = Int(note.start * sr)
             guard first < n else { continue }
             var phase = 0.0
+            // Noise: a fixed seed so the sound is the same every launch
+            var seed: UInt32 = 0x9E37_79B9 &+ UInt32(first)
+            var dark = 0.0
+            let kNoise = 1 - exp(-2 * .pi * note.noiseCutoff / sr)
             for i in first..<n {
                 let t = Double(i - first) / sr
                 // Exponential glide in pitch (sounds even across octaves)
@@ -177,6 +204,12 @@ enum ToneSynth {
                 if let tr = note.tremolo { a *= 1 - tr.depth * (0.5 + 0.5 * sin(2 * .pi * tr.rate * t)) }
                 var s = sin(phase * 0.5) * note.sub
                 for (mult, level) in note.partials { s += sin(phase * mult) * level }
+                if note.noise > 0 {
+                    seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5
+                    let white = Double(seed) / Double(UInt32.max) * 2 - 1
+                    dark += kNoise * (white - dark)
+                    s += dark * note.noise * 3 // the low pass takes most of its level
+                }
                 out[i] += Float(s * a * note.amp)
             }
         }

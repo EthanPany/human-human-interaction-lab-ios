@@ -102,6 +102,10 @@ final class Feedback {
                 let i = 0.3 + 0.65 * c, sharp = 0.15 + 0.5 * c
                 haptics.pattern([(0, i, sharp), (0.13, i * 0.6, sharp * 0.7)])
             }
+        case .met:
+            guard throttle("met", 3) else { return }
+            if s { sound.play(.met) }
+            if h { haptics.settle() }
         case .talkStart:
             guard throttle("talk", 2) else { return }
             if s { sound.play(.talk) }

@@ -2,9 +2,10 @@ import Foundation
 import UIKit
 
 /// Turns badge state changes into cues: a chime when a match appears, a gentle
-/// heartbeat that quickens and rises as they get closer, a warm two note when
-/// the talk starts and a little celebration when you're saved. Only while the
-/// badge is on screen (worn, or the Badge tab) and the app is active.
+/// heartbeat that quickens and rises as they get closer, a low settling thump
+/// when you finally meet, a warm two note when the talk starts and a little
+/// celebration when you're saved. Only while the badge is on screen (worn, or
+/// the Badge tab) and the app is active.
 @MainActor
 final class BadgeCues {
     /// Full screen badge (the heartbeat is a little louder then).
@@ -12,7 +13,11 @@ final class BadgeCues {
     /// The Badge tab's preview is on screen.
     var isPreviewVisible = false { didSet { refresh() } }
 
+    /// We met and are still together: the heartbeat rests.
+    var together = false { didSet { if together != oldValue { refresh() } } }
+
     private var mode: BadgeMode = .idle
+    private var lastMetAt: Date?
     private var peerId: String?
     private var closeness = 0.0
     private var isActive = UIApplication.shared.applicationState != .background
@@ -44,7 +49,10 @@ final class BadgeCues {
             case .match where old != .match || oldPeer != state.peerId:
                 Feedback.shared.play(.matchAppears)
             case .talking where old != .talking:
-                Feedback.shared.play(.talkStart)
+                // Right after the meet moment the settling sound says it already
+                if lastMetAt.map({ Date().timeIntervalSince($0) > 30 }) ?? true {
+                    Feedback.shared.play(.talkStart)
+                }
             case .connected where old != .connected:
                 Feedback.shared.play(.saved)
             default:
@@ -54,17 +62,26 @@ final class BadgeCues {
         refresh(justAppeared: old != .match)
     }
 
+    /// The "we finally met" moment (BadgeStore decides when, once per meeting).
+    func met() {
+        lastMetAt = Date()
+        together = true
+        if isShown { Feedback.shared.play(.met) }
+    }
+
     /// Signed out.
     func reset() {
         mode = .idle
         peerId = nil
         closeness = 0
+        lastMetAt = nil
+        together = false
         refresh()
     }
 
     /// Run the heartbeat only while a match approaches and the badge is shown.
     private func refresh(justAppeared: Bool = false) {
-        let shouldBeat = mode == .match && isShown
+        let shouldBeat = mode == .match && isShown && !together
         if !shouldBeat {
             heartbeat?.cancel()
             heartbeat = nil

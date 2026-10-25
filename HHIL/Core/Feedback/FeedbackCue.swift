@@ -29,6 +29,8 @@ enum FeedbackCue {
     case matchAppears
     /// One heartbeat while a match approaches; higher and stronger as closeness (0...1) rises.
     case approachTick(closeness: Double, prominent: Bool)
+    /// We finally met (came within talking distance): relief, a stone settling into a lake.
+    case met
     case talkStart
     case saved
 
@@ -39,7 +41,7 @@ enum FeedbackCue {
 enum SoundID: Hashable {
     case tap, press, tab, toggleOn, toggleOff, wear, takeOff
     case poke, pop, land, boingSmall, boingBig
-    case chime, tick(Int), talk, celebrate, error
+    case chime, tick(Int), met, talk, celebrate, error
 
     static let tickSteps = 8
 }

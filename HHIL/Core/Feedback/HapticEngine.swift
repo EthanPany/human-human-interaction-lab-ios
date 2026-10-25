@@ -58,6 +58,44 @@ final class HapticEngine {
         }
     }
 
+    /// We met: one soft, heavy hit, then a low rumble that dies away like
+    /// ripples settling. Falls back to a single soft impact.
+    func settle() {
+        guard let engine = startedEngine() else {
+            impact(.soft, intensity: 1)
+            return
+        }
+        let hit = CHHapticEvent(eventType: .hapticTransient, parameters: [
+            CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
+            CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.08),
+        ], relativeTime: 0)
+        let rumble = CHHapticEvent(eventType: .hapticContinuous, parameters: [
+            CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.55),
+            CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.02),
+        ], relativeTime: 0.03, duration: 1.1)
+        // Decay the rumble from full to nothing, fast at first, then slowly
+        let fade = CHHapticParameterCurve(parameterID: .hapticIntensityControl, controlPoints: [
+            CHHapticParameterCurve.ControlPoint(relativeTime: 0, value: 1),
+            CHHapticParameterCurve.ControlPoint(relativeTime: 0.25, value: 0.5),
+            CHHapticParameterCurve.ControlPoint(relativeTime: 0.6, value: 0.2),
+            CHHapticParameterCurve.ControlPoint(relativeTime: 1.1, value: 0),
+        ], relativeTime: 0.03)
+        // Two faint after ripples (the fade above scales them down too)
+        let ripples = [(0.32, 0.45), (0.6, 0.35)].map { t, i in
+            CHHapticEvent(eventType: .hapticTransient, parameters: [
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: Float(i)),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.05),
+            ], relativeTime: t)
+        }
+        do {
+            let pattern = try CHHapticPattern(events: [hit, rumble] + ripples, parameterCurves: [fade])
+            let player = try engine.makePlayer(with: pattern)
+            try player.start(atTime: CHHapticTimeImmediate)
+        } catch {
+            needsStart = true
+        }
+    }
+
     // MARK: Continuous squish
 
     func startSquish() {
