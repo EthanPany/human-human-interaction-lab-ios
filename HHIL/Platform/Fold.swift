@@ -19,9 +19,9 @@ private struct FoldChangeModifier: ViewModifier {
     let action: (FoldState) -> Void
 
     func body(content: Content) -> some View {
-        // The hinge API ships in the iOS 27 SDK (Xcode 27, Swift 6.3). Older
-        // toolchains, like CI on Xcode 26, build without it.
-        #if compiler(>=6.3)
+        // The hinge API ships in the iOS 27 SDK. Config/App.xcconfig sets
+        // HINGE_API only when building against it, so Xcode 26 (CI) still builds.
+        #if HINGE_API
         if #available(iOS 27.0, *) {
             content.onHingeChange { _, context in
                 guard let hinge = context.hinge else { return } // no hinge: normal iPhone

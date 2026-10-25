@@ -1,3 +1,9 @@
 // Shared build settings. Your machine specific values live in Secrets.xcconfig (not committed).
 // Copy Secrets.example.xcconfig to Secrets.xcconfig and fill it in.
 #include? "Secrets.xcconfig"
+
+// iPhone Duo hinge API (Platform/Fold.swift) exists from the iOS 27 SDK on.
+SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphoneos27*] = $(inherited) HINGE_API
+SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphonesimulator27*] = $(inherited) HINGE_API
+SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphoneos28*] = $(inherited) HINGE_API
+SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphonesimulator28*] = $(inherited) HINGE_API

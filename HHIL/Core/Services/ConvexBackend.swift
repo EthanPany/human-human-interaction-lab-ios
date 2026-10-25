@@ -48,10 +48,10 @@ final class ConvexBackend: Backend {
         if let v = patch.avatarShape { fields["avatarShape"] = v }
         if let v = patch.avatarColor { fields["avatarColor"] = v }
         if let v = patch.badgeLayout { fields["badgeLayout"] = v }
-        if let v = patch.tags { fields["tags"] = v }
+        if let v = patch.tags { fields["tags"] = v.map { $0 as ConvexEncodable? } }
         if let v = patch.lookingFor { fields["lookingFor"] = v }
         if let v = patch.offers { fields["offers"] = v }
-        if let v = patch.hobbies { fields["hobbies"] = v }
+        if let v = patch.hobbies { fields["hobbies"] = v.map { $0 as ConvexEncodable? } }
         if let v = patch.appearance { fields["appearance"] = v }
         if let v = patch.californiaMode { fields["californiaMode"] = v }
         if let v = patch.recordConversations { fields["recordConversations"] = v }
