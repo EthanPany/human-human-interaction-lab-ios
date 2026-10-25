@@ -15,6 +15,8 @@ struct ProfileEditView: View {
     @State private var offers = ""
     @State private var hobbies = ""
     @State private var appearance = ""
+    /// Save stays off until the form holds the real profile, so it can never send blanks over it.
+    @State private var loaded = false
 
     var body: some View {
         NavigationStack {
@@ -55,14 +57,16 @@ struct ProfileEditView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { Task { await save() } }.fontWeight(.semibold)
+                        .disabled(!loaded)
                 }
             }
             .onAppear(perform: fill)
+            .onChange(of: env.session.profile?.id) { if !loaded { fill() } }
         }
     }
 
     private func fill() {
-        guard let p = env.session.profile else { return }
+        guard !loaded, let p = env.session.profile else { return }
         name = p.name ?? ""
         headline = p.headline ?? ""
         company = p.company ?? ""
@@ -72,10 +76,12 @@ struct ProfileEditView: View {
         offers = p.offers ?? ""
         hobbies = (p.hobbies ?? []).joined(separator: ", ")
         appearance = p.appearance ?? ""
+        loaded = true
     }
 
     /// Sends every field, so clearing one clears it on the server too.
     private func save() async {
+        guard loaded else { return }
         await env.session.update(ProfilePatch(
             name: name.trimmed,
             headline: headline.trimmed,
