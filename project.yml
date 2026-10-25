@@ -38,6 +38,7 @@ targets:
         NSNearbyInteractionUsageDescription: Your badge lights up when someone you should meet is close by.
         NSMicrophoneUsageDescription: Records conversations so your agent can send you a summary.
         NSSpeechRecognitionUsageDescription: Transcribes conversations on your phone for your summary.
+        NSMotionUsageDescription: Your avatar notices when you walk, run or ride, and bounces along with you.
         LSApplicationQueriesSchemes: [sms]
         # Standard encryption only (HTTPS), so no export compliance documents
         ITSAppUsesNonExemptEncryption: false

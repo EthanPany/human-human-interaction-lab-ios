@@ -100,6 +100,8 @@ struct IdentityCard: View {
             hasMet: c.hasMet,
             peerSide: (c.look?.x ?? 1) < 0 ? -1 : 1
         )
+        // The wearer's own idle avatar feels the phone move (walking, shakes, stillness)
+        .avatarSensesMotion(c.followsTilt)
     }
 
     private var photo: some View {
