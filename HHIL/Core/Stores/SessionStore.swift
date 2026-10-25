@@ -18,10 +18,22 @@ final class SessionStore {
     private var momentsTask: Task<Void, Never>?
     private static let userIdKey = "userId"
 
-    init(backend: Backend) {
+    /// How the session begins: the saved sign in, or a fixed state for UI tests.
+    enum Start {
+        case restoreSaved
+        case signedIn(String)
+        case signedOut
+    }
+
+    init(backend: Backend, start: Start = .restoreSaved) {
         self.backend = backend
-        if let saved = UserDefaults.standard.string(forKey: Self.userIdKey) {
-            didSignIn(saved)
+        switch start {
+        case .restoreSaved:
+            if let saved = UserDefaults.standard.string(forKey: Self.userIdKey) { didSignIn(saved) }
+        case .signedIn(let id):
+            didSignIn(id)
+        case .signedOut:
+            break
         }
     }
 

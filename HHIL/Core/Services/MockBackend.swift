@@ -3,16 +3,18 @@ import Foundation
 /// In memory backend for SwiftUI previews and for running without Convex.
 /// Live queries are real streams: edits made in the app show up right away.
 final class MockBackend: Backend {
+    static let demoUserId = "me"
+
     private var profile = UserProfile(
-        id: "me", phone: "+15555550100", name: "Ethan", headline: "Brand marketer", company: "Cal Hacks",
+        id: demoUserId, phone: "+15555550100", name: "Ethan", headline: "Brand marketer", company: "Cal Hacks",
         location: "Berkeley, CA", tags: ["Student", "Product designer", "Startup founder"],
         lookingFor: "iOS engineers", offers: "Design, multiagent systems", hobbies: ["Climbing", "Film photos"],
         appearance: nil, californiaMode: true, recordConversations: true, hasPassword: false,
-        avatarShape: "puzzle", avatarColor: "#FF6C6E", badgeLayout: "avatar", photoUrl: nil
+        avatarShape: "blob", avatarColor: "#FF6C6E", badgeLayout: "avatar", photoUrl: nil
     )
     private var profileWatchers: [UUID: AsyncThrowingStream<UserProfile?, Error>.Continuation] = [:]
 
-    func signIn(phone: String, name: String?, password: String?) async throws -> String { "me" }
+    func signIn(phone: String, name: String?, password: String?) async throws -> String { Self.demoUserId }
     func heartbeat(userId: String) async throws {}
 
     func me(userId: String) -> AsyncThrowingStream<UserProfile?, Error> {
@@ -76,9 +78,46 @@ final class MockBackend: Backend {
     func reportDistance(userId: String, peerId: String, meters: Double) async throws {}
     func finishConversation(id: String, transcript: String?) async throws {}
 
-    func people(userId: String) -> AsyncThrowingStream<[PersonSummary], Error> { once([]) }
-    func personDetail(userId: String, otherId: String) -> AsyncThrowingStream<PersonDetail?, Error> { once(nil) }
+    func people(userId: String) -> AsyncThrowingStream<[PersonSummary], Error> { once(Self.people) }
+
+    func personDetail(userId: String, otherId: String) -> AsyncThrowingStream<PersonDetail?, Error> {
+        guard let p = Self.people.first(where: { $0.id == otherId }) else { return once(nil) }
+        let met = p.connectedAt
+        let detail = PersonDetail(
+            person: PersonProfile(
+                id: p.id, name: p.name, headline: p.headline, company: p.company, location: p.location,
+                tags: p.tags, hobbies: ["Bouldering", "Film photos"], avatarShape: p.avatarShape,
+                avatarColor: p.avatarColor, photoUrl: nil
+            ),
+            connectedAt: met,
+            conversation: ConversationInfo(
+                startedAt: met - 6 * 60_000, endedAt: met, summary: p.lastSummary,
+                topics: ["Design systems", "Hiring", "Hackathons"],
+                followUp: "Hey \(p.name ?? "there"), great talking at Cal Hacks! Want to grab coffee next week?"
+            ),
+            timeline: [
+                TimelineItem(kind: "met", text: "Met at Cal Hacks", at: met - 6 * 60_000),
+                TimelineItem(kind: "saved", text: "Saved to People", at: met),
+            ]
+        )
+        return once(detail)
+    }
     func currentPerson(userId: String) -> AsyncThrowingStream<String?, Error> { once(nil) }
+
+    /// Sample people so the People tab has something to show.
+    private static let people: [PersonSummary] = {
+        let now = Date().timeIntervalSince1970 * 1000
+        return [
+            PersonSummary(id: "p1", name: "Maya", headline: "Product designer", company: "Figma",
+                          location: "San Francisco, CA", tags: ["Product designer", "Climbing"],
+                          avatarShape: "blob", avatarColor: "#3BB52D", photoUrl: nil, connectedAt: now - 20 * 60_000,
+                          lastSummary: "Maya leads design systems at Figma and is looking for iOS engineers for a side project."),
+            PersonSummary(id: "p2", name: "Daniel Okafor", headline: "ML engineer", company: "Anthropic",
+                          location: "Berkeley, CA", tags: ["Startup founder"],
+                          avatarShape: "flower", avatarColor: "#EB8FFF", photoUrl: nil, connectedAt: now - 95 * 60_000,
+                          lastSummary: "Daniel works on evals and wants to try the badge at his next meetup."),
+        ]
+    }()
 
     private func once<T>(_ value: T) -> AsyncThrowingStream<T, Error> {
         AsyncThrowingStream { continuation in continuation.yield(value) }

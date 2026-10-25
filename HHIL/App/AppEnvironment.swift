@@ -16,17 +16,26 @@ final class AppEnvironment {
     private(set) var currentPersonId: String?
     private var currentPersonTask: Task<Void, Never>?
 
-    init(backend: Backend, usingMock: Bool) {
+    init(backend: Backend, usingMock: Bool, start: SessionStore.Start = .restoreSaved) {
         self.backend = backend
         self.usingMock = usingMock
         let recorder = ConversationRecorder()
-        session = SessionStore(backend: backend)
+        session = SessionStore(backend: backend, start: start)
         badge = BadgeStore(backend: backend, recorder: recorder)
         nearby = NearbyService(backend: backend)
     }
 
     /// Convex when a URL is configured, otherwise the in memory mock.
+    /// UI tests pass `-uiTestDemo` (mock, signed in as the demo user) or
+    /// `-uiTestSignedOut` (mock, on the sign in screen).
     static func live() -> AppEnvironment {
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("-uiTestSignedOut") {
+            return AppEnvironment(backend: MockBackend(), usingMock: true, start: .signedOut)
+        }
+        if arguments.contains("-uiTestDemo") {
+            return AppEnvironment(backend: MockBackend(), usingMock: true, start: .signedIn(MockBackend.demoUserId))
+        }
         if let url = AppConfig.convexURL {
             return AppEnvironment(backend: ConvexBackend(url: url), usingMock: false)
         }

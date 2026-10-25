@@ -19,7 +19,7 @@ struct SignInView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     HStack {
                         Spacer()
-                        AvatarView(shape: .puzzle, color: theme.red, expression: busy ? .excited : .curious, seed: 3)
+                        AvatarView(shape: .blob, color: theme.red, expression: busy ? .excited : .curious, seed: 3)
                             .frame(width: 130, height: 130)
                         Spacer()
                     }

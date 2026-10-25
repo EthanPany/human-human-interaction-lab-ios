@@ -23,6 +23,9 @@ targets:
           - "Resources/Fonts/*.txt"
     dependencies:
       - package: ConvexMobile
+    scheme:
+      testTargets:
+        - HHILUITests
     info:
       path: HHIL/Info.plist
       properties:
@@ -60,3 +63,21 @@ targets:
         "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphonesimulator27*]": $(inherited) HINGE_API
         "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphoneos28*]": $(inherited) HINGE_API
         "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphonesimulator28*]": $(inherited) HINGE_API
+  # Screenshot walkthrough on the mock backend (CI: the screenshots job)
+  HHILUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: HHILUITests
+    dependencies:
+      - target: HHIL
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ethanpany.hhil.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        TEST_TARGET_NAME: HHIL
+        "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
