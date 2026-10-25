@@ -8,7 +8,9 @@ struct HHILApp: App {
         WindowGroup {
             RootView()
                 .environment(env)
-                .environment(\.theme, .wireframe) // swap in the designers' Theme here
+                .environment(env.motion)
+                .environment(\.theme, .playful) // swap the whole look here
+                .tint(Theme.playful.strongInk)
         }
     }
 }

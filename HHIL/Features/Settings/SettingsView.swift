@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.openURL) private var openURL
+    @Environment(\.theme) private var theme
     @State private var backendURL = AppConfig.convexURLOverride ?? ""
     @State private var savedURLNote = false
 
@@ -50,6 +51,8 @@ struct SettingsView: View {
                 Button("Sign out", role: .destructive) { env.session.signOut() }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(theme.background)
         .navigationTitle("Settings")
     }
 

@@ -7,11 +7,15 @@ import Observation
 final class SessionStore {
     private(set) var userId: String?
     private(set) var profile: UserProfile?
+    private(set) var moments: [Moment] = []
+    /// True while a photo is uploading (drives a spinner).
+    private(set) var isUploading = false
     var lastError: String?
 
     private let backend: Backend
     private var profileTask: Task<Void, Never>?
     private var heartbeatTask: Task<Void, Never>?
+    private var momentsTask: Task<Void, Never>?
     private static let userIdKey = "userId"
 
     init(backend: Backend) {
@@ -32,6 +36,7 @@ final class SessionStore {
                 password: password?.nilIfBlank
             )
             UserDefaults.standard.set(id, forKey: Self.userIdKey)
+            lastError = nil
             didSignIn(id)
         } catch {
             lastError = error.localizedDescription
@@ -42,8 +47,10 @@ final class SessionStore {
         UserDefaults.standard.removeObject(forKey: Self.userIdKey)
         profileTask?.cancel()
         heartbeatTask?.cancel()
+        momentsTask?.cancel()
         userId = nil
         profile = nil
+        moments = []
     }
 
     func update(_ patch: ProfilePatch) async {
@@ -52,14 +59,61 @@ final class SessionStore {
         catch { lastError = error.localizedDescription }
     }
 
+    // MARK: Photos
+
+    /// Badge photo. Pass nil to remove it.
+    func setPhoto(_ jpeg: Data?) async {
+        guard let userId else { return }
+        isUploading = true
+        defer { isUploading = false }
+        do {
+            let storageId = try await jpeg.asyncMap { try await backend.uploadImage($0) }
+            try await backend.setPhoto(userId: userId, storageId: storageId)
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    func addMoment(_ jpeg: Data, caption: String?) async {
+        guard let userId else { return }
+        isUploading = true
+        defer { isUploading = false }
+        do {
+            let storageId = try await backend.uploadImage(jpeg)
+            try await backend.addMoment(userId: userId, storageId: storageId, caption: caption?.nilIfBlank)
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    func removeMoment(_ moment: Moment) async {
+        guard let userId else { return }
+        do { try await backend.removeMoment(userId: userId, momentId: moment.id) }
+        catch { lastError = error.localizedDescription }
+    }
+
     private func didSignIn(_ id: String) {
         userId = id
         profileTask?.cancel()
         profileTask = Task { [backend] in
             do {
-                for try await p in backend.me(userId: id) { self.profile = p }
+                for try await p in backend.me(userId: id) {
+                    // The account is gone (database reset, other deployment): start over.
+                    guard let p else { self.signOut(); return }
+                    self.profile = p
+                }
             } catch {
-                self.lastError = error.localizedDescription
+                // An id from another deployment fails validation: start over too.
+                print("profile stream failed:", error)
+                self.signOut()
+            }
+        }
+        momentsTask?.cancel()
+        momentsTask = Task { [backend] in
+            do {
+                for try await list in backend.moments(userId: id) { self.moments = list }
+            } catch {
+                print("moments stream ended:", error)
             }
         }
         heartbeatTask?.cancel()
@@ -68,6 +122,15 @@ final class SessionStore {
                 try? await backend.heartbeat(userId: id)
                 try? await Task.sleep(for: .seconds(30))
             }
+        }
+    }
+}
+
+extension Optional {
+    func asyncMap<T>(_ transform: (Wrapped) async throws -> T) async rethrows -> T? {
+        switch self {
+        case .some(let value): return try await transform(value)
+        case .none: return nil
         }
     }
 }

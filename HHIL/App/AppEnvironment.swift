@@ -10,6 +10,7 @@ final class AppEnvironment {
     let badge: BadgeStore
     let router = Router()
     let nearby: NearbyService
+    let motion = MotionService()
     let usingMock: Bool
     /// The person you're with or met most recently (iPhone Duo opens to them).
     private(set) var currentPersonId: String?

@@ -6,11 +6,17 @@ struct PersonSummary: Decodable, Identifiable, Hashable {
     let id: String
     var name: String?
     var headline: String?
+    var company: String?
+    var location: String?
     var tags: [String]
+    var avatarShape: String?
+    var avatarColor: String?
+    var photoUrl: String?
     @ConvexFloat var connectedAt: Double
     var lastSummary: String?
 
     var displayName: String { name ?? "Someone" }
+    var avatar: AvatarStyle { AvatarStyle(shape: avatarShape, color: avatarColor) }
     var connectedDate: Date { Date(timeIntervalSince1970: connectedAt / 1000) }
 
     static func == (l: PersonSummary, r: PersonSummary) -> Bool { l.id == r.id }
@@ -22,8 +28,16 @@ struct PersonProfile: Decodable {
     let id: String
     var name: String?
     var headline: String?
+    var company: String?
+    var location: String?
     var tags: [String]
     var hobbies: [String]
+    var avatarShape: String?
+    var avatarColor: String?
+    var photoUrl: String?
+
+    var avatar: AvatarStyle { AvatarStyle(shape: avatarShape, color: avatarColor) }
+    var photoURL: URL? { photoUrl.flatMap(URL.init(string:)) }
 }
 
 struct ConversationInfo: Decodable {

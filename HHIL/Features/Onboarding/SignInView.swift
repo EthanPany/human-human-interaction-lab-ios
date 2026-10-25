@@ -8,51 +8,76 @@ struct SignInView: View {
     @State private var name = ""
     @State private var password = ""
     @State private var busy = false
+    @FocusState private var focused: Field?
+
+    private enum Field { case phone, name, password }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Spacer().frame(height: 40)
-            Text("Meet the right people").font(theme.largeTitle)
-            Text("Your phone becomes your badge. Your agent texts you who to meet and remembers them for you.")
-                .foregroundStyle(theme.inkSecondary)
+        ZStack {
+            FlowingBackground()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack {
+                        Spacer()
+                        AvatarView(shape: .puzzle, color: theme.red, expression: busy ? .excited : .curious, seed: 3)
+                            .frame(width: 130, height: 130)
+                        Spacer()
+                    }
+                    .padding(.top, 36)
 
-            field("Phone number", text: $phone, keyboard: .phonePad, content: .telephoneNumber)
-            field("Name (optional)", text: $name, keyboard: .default, content: .givenName)
-            SecureField("Password (optional)", text: $password)
-                .padding(14)
-                .background(theme.surface, in: RoundedRectangle(cornerRadius: 16))
+                    Card {
+                        Text("Meet the right people").font(.brand(34, .semibold)).foregroundStyle(theme.strongInk)
+                        Text("Your phone becomes a live badge. Your agent texts you who to meet and remembers them for you.")
+                            .font(theme.body)
+                            .foregroundStyle(theme.inkSecondary)
 
-            if let error = env.session.lastError {
-                Text(error).font(.footnote).foregroundStyle(.red)
-            }
+                        field("Phone number", text: $phone, keyboard: .phonePad, content: .telephoneNumber)
+                            .focused($focused, equals: .phone)
+                        field("Name (optional)", text: $name, keyboard: .default, content: .givenName)
+                            .focused($focused, equals: .name)
+                        SecureField("Password (optional)", text: $password)
+                            .textContentType(.password)
+                            .focused($focused, equals: .password)
+                            .font(theme.body)
+                            .padding(14)
+                            .background(theme.surfaceMuted, in: RoundedRectangle(cornerRadius: 14))
 
-            Spacer()
+                        if let error = env.session.lastError {
+                            Text(error).font(theme.caption).foregroundStyle(theme.red)
+                        }
 
-            Button {
-                busy = true
-                Task {
-                    await env.session.signIn(phone: phone, name: name, password: password)
-                    busy = false
+                        Button {
+                            submit()
+                        } label: {
+                            if busy { ProgressView() } else { Text("Continue") }
+                        }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .disabled(phone.filter(\.isNumber).count < 10 || busy)
+                        .padding(.top, 4)
+                    }
                 }
-            } label: {
-                Group {
-                    if busy { ProgressView() } else { Text("Continue").font(.headline) }
-                }
-                .frame(maxWidth: .infinity, minHeight: 50)
+                .padding(theme.screenPadding)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(theme.ink)
-            .disabled(phone.filter(\.isNumber).count < 10 || busy)
+            .scrollDismissesKeyboard(.interactively)
         }
-        .padding(24)
-        .background(theme.background)
+        .onAppear { focused = .phone }
+    }
+
+    private func submit() {
+        busy = true
+        focused = nil
+        Task {
+            await env.session.signIn(phone: phone, name: name, password: password)
+            busy = false
+        }
     }
 
     private func field(_ title: String, text: Binding<String>, keyboard: UIKeyboardType, content: UITextContentType) -> some View {
         TextField(title, text: text)
             .keyboardType(keyboard)
             .textContentType(content)
+            .font(theme.body)
             .padding(14)
-            .background(theme.surface, in: RoundedRectangle(cornerRadius: 16))
+            .background(theme.surfaceMuted, in: RoundedRectangle(cornerRadius: 14))
     }
 }

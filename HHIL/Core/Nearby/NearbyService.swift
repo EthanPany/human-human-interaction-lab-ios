@@ -1,5 +1,6 @@
 import Foundation
 import NearbyInteraction
+import Observation
 
 /// UWB ranging with everyone at the event.
 ///
@@ -8,13 +9,18 @@ import NearbyInteraction
 /// peer has published their token for us. Distances go to the backend about
 /// once per second per peer; the server turns them into badge state.
 @MainActor
+@Observable
 final class NearbyService: NSObject {
-    private let backend: Backend
-    private var userId: String?
-    private var peersTask: Task<Void, Never>?
-    private var sessions: [String: NISession] = [:] // peerId -> session
-    private var runningWith: [String: String] = [:] // peerId -> peer token we run with
-    private var lastReport: [String: Date] = [:]
+    /// Horizontal direction to each peer, -1 (left) ... 1 (right), when the
+    /// phone can tell (they are in front of it). Drives where the avatar looks.
+    private(set) var directions: [String: Double] = [:]
+
+    @ObservationIgnored private let backend: Backend
+    @ObservationIgnored private var userId: String?
+    @ObservationIgnored private var peersTask: Task<Void, Never>?
+    @ObservationIgnored private var sessions: [String: NISession] = [:] // peerId -> session
+    @ObservationIgnored private var runningWith: [String: String] = [:] // peerId -> peer token we run with
+    @ObservationIgnored private var lastReport: [String: Date] = [:]
 
     init(backend: Backend) {
         self.backend = backend
@@ -45,6 +51,7 @@ final class NearbyService: NSObject {
         sessions.values.forEach { $0.invalidate() }
         sessions.removeAll()
         runningWith.removeAll()
+        directions.removeAll()
     }
 
     private func sync(_ peers: [Peer]) {
@@ -82,8 +89,12 @@ final class NearbyService: NSObject {
         sessions.first(where: { $0.value === session })?.key
     }
 
-    fileprivate func handle(distance: Float, from session: NISession) {
+    fileprivate func handle(distance: Float, direction: SIMD3<Float>?, from session: NISession) {
         guard let userId, let peerId = peerId(for: session) else { return }
+        if let direction {
+            let x = Double(max(-1, min(1, direction.x)))
+            if abs((directions[peerId] ?? 0) - x) > 0.05 { directions[peerId] = x }
+        }
         let now = Date()
         if let last = lastReport[peerId], now.timeIntervalSince(last) < 1 { return }
         lastReport[peerId] = now
@@ -111,8 +122,9 @@ final class NearbyService: NSObject {
 
 extension NearbyService: NISessionDelegate {
     nonisolated func session(_ session: NISession, didUpdate nearbyObjects: [NINearbyObject]) {
-        guard let distance = nearbyObjects.first?.distance else { return }
-        Task { @MainActor in self.handle(distance: distance, from: session) }
+        guard let object = nearbyObjects.first, let distance = object.distance else { return }
+        let direction = object.direction
+        Task { @MainActor in self.handle(distance: distance, direction: direction, from: session) }
     }
 
     nonisolated func sessionWasSuspended(_ session: NISession) {}

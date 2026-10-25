@@ -10,6 +10,13 @@ protocol Backend: AnyObject {
     func me(userId: String) -> AsyncThrowingStream<UserProfile?, Error>
     func updateProfile(userId: String, patch: ProfilePatch) async throws
 
+    // Photos (JPEG data in, storage id out)
+    func uploadImage(_ jpeg: Data) async throws -> String
+    func setPhoto(userId: String, storageId: String?) async throws
+    func moments(userId: String) -> AsyncThrowingStream<[Moment], Error>
+    func addMoment(userId: String, storageId: String, caption: String?) async throws
+    func removeMoment(userId: String, momentId: String) async throws
+
     // Badge and proximity
     func badgeState(userId: String) -> AsyncThrowingStream<BadgeState, Error>
     func peers(userId: String) -> AsyncThrowingStream<[Peer], Error>

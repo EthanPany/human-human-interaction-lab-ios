@@ -9,42 +9,46 @@ struct SetupChoiceView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("How do you want to set up?").font(theme.title)
+            Text("How do you want to set up?").font(theme.title).foregroundStyle(theme.strongInk)
             Text("Everything is optional. You can change it anytime.")
+                .font(theme.body)
                 .foregroundStyle(theme.inkSecondary)
 
-            choice(
-                "Text with your agent",
-                "It asks a few questions at your own pace and fills in your profile."
-            ) {
+            choice("Text with your agent", "It asks a few questions at your own pace and fills in your profile.",
+                   fill: theme.yellow, icon: "message.fill") {
                 if let url = AppConfig.agentSMSURL(body: "Hi! Let's set up my badge.") { openURL(url) }
-                finish()
+                onDone()
             }
-            choice("Fill it in myself", "Add your name, badge tags and who you want to meet.") {
+            choice("Fill it in myself", "Add your name, interests and who you want to meet.",
+                   fill: theme.blue, icon: "pencil") {
                 env.router.tab = .profile
-                finish()
+                onDone()
             }
 
             Spacer()
-            Button("Skip for now") { finish() }
+            Button("Skip for now") { onDone() }
+                .buttonStyle(SecondaryButtonStyle())
                 .frame(maxWidth: .infinity)
         }
         .padding(24)
+        .background(theme.background)
         .task { _ = await ConversationRecorder.requestPermissions() }
     }
 
-    private func choice(_ title: String, _ detail: String, action: @escaping () -> Void) -> some View {
+    private func choice(_ title: String, _ detail: String, fill: Color, icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title).font(theme.headline).foregroundStyle(theme.ink)
-                Text(detail).font(.subheadline).foregroundStyle(theme.inkSecondary)
-                    .multilineTextAlignment(.leading)
+            HStack(alignment: .top, spacing: 14) {
+                IconButtonLabel(systemImage: icon)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title).font(theme.headline).foregroundStyle(theme.strongInk)
+                    Text(detail).font(theme.body).foregroundStyle(theme.ink)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(18)
-            .background(theme.surfaceMuted, in: RoundedRectangle(cornerRadius: theme.cornerRadius))
+            .background(fill, in: RoundedRectangle(cornerRadius: theme.cornerRadius))
         }
+        .buttonStyle(PressScaleStyle())
     }
-
-    private func finish() { onDone() }
 }

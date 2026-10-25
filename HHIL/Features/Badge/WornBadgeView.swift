@@ -11,7 +11,7 @@ struct WornBadgeView: View {
         GeometryReader { geo in
             BadgeView(
                 presentation: .worn,
-                layout: geo.size.width > geo.size.height ? .horizontal : .vertical
+                orientation: geo.size.width > geo.size.height ? .horizontal : .vertical
             )
         }
         .ignoresSafeArea()

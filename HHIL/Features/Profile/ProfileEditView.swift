@@ -3,10 +3,13 @@ import SwiftUI
 /// Fill in your profile by hand. Lists are comma separated.
 struct ProfileEditView: View {
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.theme) private var theme
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
     @State private var headline = ""
+    @State private var company = ""
+    @State private var location = ""
     @State private var tags = ""
     @State private var lookingFor = ""
     @State private var offers = ""
@@ -18,32 +21,40 @@ struct ProfileEditView: View {
             Form {
                 Section("You") {
                     TextField("Name", text: $name)
-                    TextField("Headline, e.g. CS student building AI tools", text: $headline)
+                        .textContentType(.givenName)
+                    TextField("Role, e.g. Brand marketer", text: $headline)
+                        .textContentType(.jobTitle)
+                    TextField("Company or school", text: $company)
+                        .textContentType(.organizationName)
+                    TextField("City, e.g. Vancouver, BC", text: $location)
+                        .textContentType(.addressCity)
                 }
                 Section {
                     TextField("e.g. Student, Product designer, Startup founder", text: $tags)
+                    TextField("Hobbies, e.g. Climbing, Film photos", text: $hobbies)
                 } header: {
-                    Text("Badge tags")
+                    Text("Interests")
                 } footer: {
-                    Text("Short conversation starters shown on your badge. The one a nearby match cares about moves to the front.")
+                    Text("Comma separated. These are conversation starters on your badge; the one a nearby match cares about moves to the front.")
                 }
                 Section("At this event") {
                     TextField("Who you want to meet", text: $lookingFor, axis: .vertical)
                     TextField("What you can help with", text: $offers, axis: .vertical)
                 }
                 Section {
-                    TextField("Hobbies, comma separated", text: $hobbies)
                     TextField("How to find you, e.g. red cap", text: $appearance)
                 } footer: {
                     Text("Your agent uses this to tell matches who to look for.")
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(theme.background)
             .navigationTitle("Edit profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { Task { await save() } }
+                    Button("Save") { Task { await save() } }.fontWeight(.semibold)
                 }
             }
             .onAppear(perform: fill)
@@ -54,6 +65,8 @@ struct ProfileEditView: View {
         guard let p = env.session.profile else { return }
         name = p.name ?? ""
         headline = p.headline ?? ""
+        company = p.company ?? ""
+        location = p.location ?? ""
         tags = (p.tags ?? []).joined(separator: ", ")
         lookingFor = p.lookingFor ?? ""
         offers = p.offers ?? ""
@@ -61,21 +74,27 @@ struct ProfileEditView: View {
         appearance = p.appearance ?? ""
     }
 
+    /// Sends every field, so clearing one clears it on the server too.
     private func save() async {
         await env.session.update(ProfilePatch(
-            name: name.nilIfBlank,
-            headline: headline.nilIfBlank,
+            name: name.trimmed,
+            headline: headline.trimmed,
+            company: company.trimmed,
+            location: location.trimmed,
             tags: Self.list(tags),
-            lookingFor: lookingFor.nilIfBlank,
-            offers: offers.nilIfBlank,
+            lookingFor: lookingFor.trimmed,
+            offers: offers.trimmed,
             hobbies: Self.list(hobbies),
-            appearance: appearance.nilIfBlank
+            appearance: appearance.trimmed
         ))
         dismiss()
     }
 
-    private static func list(_ text: String) -> [String]? {
-        let items = text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        return items.isEmpty ? nil : items
+    private static func list(_ text: String) -> [String] {
+        text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
+}
+
+private extension String {
+    var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
 }

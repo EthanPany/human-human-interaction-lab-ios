@@ -22,21 +22,41 @@ struct PersonDetailView: View {
                 ProgressView().padding(.top, 80)
             }
         }
-        .background(theme.background)
+        .background(FlowingBackground(flow: 0.4))
         .navigationTitle(detail?.person.name ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: personId) { await load() }
     }
 
     private func header(_ p: PersonProfile) -> some View {
-        HStack(spacing: 14) {
-            Circle().fill(theme.surfaceMuted).frame(width: 64, height: 64)
-                .overlay(Text((p.name ?? "?").prefix(1)).font(.title2.bold()))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(p.name ?? "Someone").font(theme.title)
-                if let h = p.headline { Text(h).foregroundStyle(theme.inkSecondary) }
-                FlowLayout(spacing: 6) {
-                    ForEach(p.tags, id: \.self) { TagChip(text: $0, size: 13, fill: theme.surfaceMuted) }
+        Card {
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(p.name ?? "Someone").font(.brand(40, .semibold)).foregroundStyle(theme.strongInk)
+                        .lineLimit(1).minimumScaleFactor(0.5)
+                    if let line = [p.company, p.headline].compactMap({ $0?.nilIfBlank }).joined(separator: " | ").nilIfBlank {
+                        Text(line).font(theme.body).foregroundStyle(theme.ink)
+                    }
+                    if let location = p.location?.nilIfBlank { LocationPill(text: location) }
+                }
+                Spacer(minLength: 0)
+                if let url = p.photoURL {
+                    AsyncImage(url: url) { $0.resizable().scaledToFill() } placeholder: { p.avatar.color.opacity(0.3) }
+                        .frame(width: 84, height: 84)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(alignment: .bottomLeading) {
+                            AvatarView(shape: p.avatar.shape, color: p.avatar.color, expression: .happy, seed: AvatarStyle.seed(p.id))
+                                .frame(width: 40, height: 40).offset(x: -14, y: 10)
+                        }
+                } else {
+                    AvatarView(shape: p.avatar.shape, color: p.avatar.color, expression: .happy, seed: AvatarStyle.seed(p.id))
+                        .frame(width: 96, height: 96)
+                }
+            }
+            let interests = p.tags + p.hobbies.filter { !p.tags.contains($0) }
+            if !interests.isEmpty {
+                FlowLayout(spacing: 8) {
+                    ForEach(interests, id: \.self) { TagChip(text: $0, size: 14) }
                 }
             }
         }
@@ -51,7 +71,7 @@ struct PersonDetailView: View {
                 .foregroundStyle(c?.summary == nil ? theme.inkSecondary : theme.ink)
             if let topics = c?.topics, !topics.isEmpty {
                 FlowLayout(spacing: 6) {
-                    ForEach(topics, id: \.self) { TagChip(text: $0, size: 13, fill: theme.surfaceMuted) }
+                    ForEach(topics, id: \.self) { TagChip(text: $0, systemImage: nil, size: 13) }
                 }
             }
         }
@@ -60,13 +80,13 @@ struct PersonDetailView: View {
     @ViewBuilder
     private func followUp(_ c: ConversationInfo?) -> some View {
         if let followUp = c?.followUp {
-            Card {
+            Card(fill: theme.yellow) {
                 SectionLabel(text: "Suggested follow up")
                 Text(followUp).font(theme.body)
                 ShareLink(item: followUp) {
                     Label("Copy or send", systemImage: "square.and.arrow.up")
-                        .font(.subheadline.weight(.semibold))
                 }
+                .buttonStyle(SecondaryButtonStyle())
             }
         }
     }

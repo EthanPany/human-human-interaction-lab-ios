@@ -19,6 +19,8 @@ targets:
     platform: iOS
     sources:
       - path: HHIL
+        excludes:
+          - "Resources/Fonts/*.txt"
     dependencies:
       - package: ConvexMobile
     info:
@@ -34,6 +36,12 @@ targets:
         NSMicrophoneUsageDescription: Records conversations so your agent can send you a summary.
         NSSpeechRecognitionUsageDescription: Transcribes conversations on your phone for your summary.
         LSApplicationQueriesSchemes: [sms]
+        # General Sans, fetched by scripts/fetch-fonts.sh (not in git, see the license)
+        UIAppFonts:
+          - GeneralSans-Regular.otf
+          - GeneralSans-Medium.otf
+          - GeneralSans-Semibold.otf
+          - GeneralSans-Bold.otf
         ConvexURL: $(CONVEX_URL)
         AgentPhone: $(AGENT_PHONE)
     settings:

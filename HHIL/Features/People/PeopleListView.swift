@@ -22,6 +22,8 @@ struct PeopleListView: View {
                     )
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(theme.background)
             .searchable(text: $search, prompt: "Search people")
             .navigationTitle("People")
             .navigationDestination(for: String.self) { PersonDetailView(personId: $0) }
@@ -53,17 +55,18 @@ private struct PersonRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Circle().fill(theme.surfaceMuted).frame(width: 42, height: 42)
-                .overlay(Text(person.displayName.prefix(1)).font(.headline))
+            AvatarView(shape: person.avatar.shape, color: person.avatar.color,
+                       expression: .happy, animated: false, seed: AvatarStyle.seed(person.id))
+                .frame(width: 46, height: 46)
             VStack(alignment: .leading, spacing: 2) {
                 Text(person.displayName).font(theme.headline)
-                if let headline = person.headline {
-                    Text(headline).font(.subheadline).foregroundStyle(theme.inkSecondary).lineLimit(1)
+                if let line = [person.headline, person.company].compactMap({ $0?.nilIfBlank }).joined(separator: " · ").nilIfBlank {
+                    Text(line).font(theme.caption).foregroundStyle(theme.inkSecondary).lineLimit(1)
                 }
             }
             Spacer()
             Text(person.connectedDate, style: .time)
-                .font(.footnote).foregroundStyle(theme.inkSecondary)
+                .font(theme.caption).foregroundStyle(theme.inkSecondary)
         }
         .padding(.vertical, 4)
     }
