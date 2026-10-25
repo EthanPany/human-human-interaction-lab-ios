@@ -23,17 +23,23 @@ struct ProfileEditView: View {
             Form {
                 Section("You") {
                     TextField("Name", text: $name)
-                        .textContentType(.givenName)
+                        .textContentType(.name)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
                     TextField("Role, e.g. Brand marketer", text: $headline)
                         .textContentType(.jobTitle)
                     TextField("Company or school", text: $company)
                         .textContentType(.organizationName)
+                        .textInputAutocapitalization(.words)
                     TextField("City, e.g. Vancouver, BC", text: $location)
-                        .textContentType(.addressCity)
+                        .textContentType(.addressCityAndState)
+                        .textInputAutocapitalization(.words)
                 }
                 Section {
                     TextField("e.g. Student, Product designer, Startup founder", text: $tags)
+                        .textInputAutocapitalization(.words)
                     TextField("Hobbies, e.g. Climbing, Film photos", text: $hobbies)
+                        .textInputAutocapitalization(.words)
                 } header: {
                     Text("Interests")
                 } footer: {

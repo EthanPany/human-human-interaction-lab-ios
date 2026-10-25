@@ -199,3 +199,43 @@ struct FlowLayout: Layout {
         }
     }
 }
+
+/// A text field with its title outside, above the box, and a hint inside.
+/// Input text and hint use the theme's dark inks, so they stay readable
+/// whatever the system appearance is. Keyboard and autofill settings are set
+/// by the caller with the usual modifiers (keyboardType, textContentType, ...).
+struct LabeledField: View {
+    var title: String
+    var hint: String
+    @Binding var text: String
+    var secure = false
+    var footnote: String?
+
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.brand(14, .semibold))
+                .foregroundStyle(theme.strongInk)
+            Group {
+                if secure {
+                    SecureField(title, text: $text, prompt: prompt)
+                } else {
+                    TextField(title, text: $text, prompt: prompt)
+                }
+            }
+            .font(theme.body)
+            .foregroundStyle(theme.strongInk)
+            .padding(14)
+            .background(theme.surfaceMuted, in: RoundedRectangle(cornerRadius: 14))
+            if let footnote {
+                Text(footnote).font(theme.caption).foregroundStyle(theme.inkSecondary)
+            }
+        }
+    }
+
+    private var prompt: Text {
+        Text(hint).foregroundStyle(theme.inkSecondary)
+    }
+}

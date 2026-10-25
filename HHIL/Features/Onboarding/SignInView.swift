@@ -31,17 +31,24 @@ struct SignInView: View {
                             .font(theme.body)
                             .foregroundStyle(theme.inkSecondary)
 
-                        field("Phone number", text: $phone, keyboard: .phonePad, content: .telephoneNumber)
+                        LabeledField(title: "Phone number", hint: "(415) 555 0123", text: $phone,
+                                     footnote: "Your agent texts this number.")
+                            .keyboardType(.phonePad)
+                            .textContentType(.telephoneNumber)
                             .focused($focused, equals: .phone)
-                        field("Name (optional)", text: $name, keyboard: .default, content: .givenName)
+                        LabeledField(title: "Name", hint: "Optional, your agent can ask", text: $name)
+                            .textContentType(.name)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .submitLabel(.next)
                             .focused($focused, equals: .name)
-                        SecureField("Password (optional)", text: $password,
-                                    prompt: Text("Password (optional)").foregroundStyle(theme.inkSecondary))
+                            .onSubmit { focused = .password }
+                        LabeledField(title: "Password", hint: "Optional, to sign in on another phone",
+                                     text: $password, secure: true)
                             .textContentType(.password)
+                            .submitLabel(.go)
                             .focused($focused, equals: .password)
-                            .font(theme.body)
-                            .padding(14)
-                            .background(theme.surfaceMuted, in: RoundedRectangle(cornerRadius: 14))
+                            .onSubmit { if canSubmit { submit() } }
 
                         if let error = env.session.lastError {
                             Text(error).font(theme.caption).foregroundStyle(theme.red)
@@ -53,7 +60,7 @@ struct SignInView: View {
                             if busy { ProgressView() } else { Text("Continue") }
                         }
                         .buttonStyle(PrimaryButtonStyle())
-                        .disabled(phone.filter(\.isNumber).count < 10 || busy)
+                        .disabled(!canSubmit)
                         .padding(.top, 4)
                     }
                 }
@@ -62,6 +69,15 @@ struct SignInView: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .onAppear { focused = .phone }
+        .toolbar {
+            // The phone pad has no Return key
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                if focused == .phone {
+                    Button("Next") { focused = .name }.fontWeight(.semibold)
+                }
+            }
+        }
     }
 
     private func submit() {
@@ -73,13 +89,5 @@ struct SignInView: View {
         }
     }
 
-    private func field(_ title: String, text: Binding<String>, keyboard: UIKeyboardType, content: UITextContentType) -> some View {
-        TextField(title, text: text, prompt: Text(title).foregroundStyle(theme.inkSecondary))
-            .keyboardType(keyboard)
-            .textContentType(content)
-            .font(theme.body)
-            .foregroundStyle(theme.strongInk)
-            .padding(14)
-            .background(theme.surfaceMuted, in: RoundedRectangle(cornerRadius: 14))
-    }
+    private var canSubmit: Bool { phone.filter(\.isNumber).count >= 10 && !busy }
 }

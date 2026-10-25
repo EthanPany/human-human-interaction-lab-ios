@@ -25,7 +25,7 @@ final class ScreenshotTests: XCTestCase {
 
         phone.tap()
         phone.typeText("5555550100")
-        let name = app.textFields["Name (optional)"]
+        let name = app.textFields["Name"]
         if name.exists { name.tap(); name.typeText("Ethan") }
         snap("02-sign-in-filled")
 
