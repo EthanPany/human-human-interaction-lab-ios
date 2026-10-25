@@ -175,9 +175,10 @@ final class NearbyService: NSObject {
             if let encoded = peer.tokenForMe, runningWith[peer.userId] != encoded {
                 if let token = Self.decode(encoded) {
                     let config = NINearbyPeerConfiguration(peerToken: token)
-                    if #available(iOS 17.0, *), Self.supportsExtendedRange {
-                        config.isExtendedDistanceMeasurementEnabled = true
-                    }
+                    // Extended range only works when BOTH phones have the U2 chip
+                    // (iPhone 15 and later); asking for it with an older peer
+                    // (e.g. iPhone 14, U1) gives no readings at all. Standard
+                    // range (~9 m) already covers our 8 m glow, so leave it off.
                     session.run(config)
                     runningWith[peer.userId] = encoded
                     diag.running = true
