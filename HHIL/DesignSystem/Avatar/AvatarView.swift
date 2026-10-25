@@ -82,15 +82,17 @@ enum AvatarRenderer {
             x: lerp(from.centerOffset.x, to.centerOffset.x, p),
             y: lerp(from.centerOffset.y, to.centerOffset.y, p)
         )
-        let center = CGPoint(x: size.width / 2 + offset.x * unit,
-                             y: size.height / 2 + offset.y * unit - hopLift)
+        let jelly = f.jelly
+        let center = CGPoint(x: size.width / 2 + (offset.x + jelly.offset.x) * unit,
+                             y: size.height / 2 + (offset.y + jelly.offset.y) * unit - hopLift)
         let idle = f.idle
 
-        // Ground shadow shrinks as it lifts
-        let up = max(0, min(1, lift / 0.16))
+        // Ground shadow shrinks as it lifts, and slides a little with the jelly
+        let up = max(0, min(1, (lift - jelly.offset.y) / 0.16))
         let shadowW = unit * 1.3 * (1 - 0.25 * up)
         ctx.fill(
-            Path(ellipseIn: CGRect(x: size.width / 2 - shadowW / 2, y: size.height / 2 + unit * 0.92,
+            Path(ellipseIn: CGRect(x: size.width / 2 + jelly.offset.x * unit * 0.6 - shadowW / 2,
+                                   y: size.height / 2 + unit * 0.92,
                                    width: shadowW, height: unit * 0.12)),
             with: .color(.black.opacity(0.08 * (1 - 0.5 * up)))
         )
@@ -102,8 +104,16 @@ enum AvatarRenderer {
 
         var layer = ctx
         layer.translateBy(x: center.x, y: center.y)
-        layer.rotate(by: .radians(f.face.tilt * Double(f.look.x) + idle.sway))
-        layer.scaleBy(x: f.breathe * (1 + f.squash), y: f.breathe * (1 - f.squash))
+        // Jelly stretch along the way it is moving (keeps its volume)
+        if jelly.stretch > 0.002 {
+            let a = jelly.stretchAngle
+            layer.rotate(by: .radians(a))
+            layer.scaleBy(x: 1 + jelly.stretch, y: 1 / (1 + jelly.stretch))
+            layer.rotate(by: .radians(-a))
+        }
+        layer.rotate(by: .radians(f.face.tilt * Double(f.look.x) + idle.sway + jelly.rotation))
+        let squash = f.squash + jelly.squash
+        layer.scaleBy(x: f.breathe * (1 + squash), y: f.breathe * (1 - squash))
 
         // Body
         let body = bodyPath(f, unit: unit)
@@ -127,8 +137,12 @@ enum AvatarRenderer {
         let drift = CGPoint(x: f.look.x * unit * 0.06, y: f.look.y * unit * 0.04)
         let l = CGPoint(x: left.x + drift.x, y: left.y + drift.y)
         let r = CGPoint(x: right.x + drift.x, y: right.y + drift.y)
-        drawEye(at: l, size: eyeSize, inner: 1, f: f, body: color, in: &layer)
-        drawEye(at: r, size: eyeSize, inner: -1, f: f, body: color, in: &layer)
+        // A raised brow: one eye a little bigger. A wink closes one into a happy arc.
+        let asym = CGFloat(max(-1, min(1, idle.asym))) * 0.18
+        drawEye(at: l, size: eyeSize * (1 + asym), inner: 1, wink: max(0, -idle.wink),
+                f: f, body: color, in: &layer)
+        drawEye(at: r, size: eyeSize * (1 - asym), inner: -1, wink: max(0, idle.wink),
+                f: f, body: color, in: &layer)
 
         // Blush
         if f.face.blush > 0.01 {
@@ -140,10 +154,21 @@ enum AvatarRenderer {
             }
         }
 
+        let mc = CGPoint(x: (l.x + r.x) / 2, y: max(l.y, r.y) + eyeSize * 1.05)
+        // Smile: a small soft curve, fading out as the mouth opens
+        let smile = idle.smile * (1 - min(1, idle.mouth * 3))
+        if smile > 0.02 {
+            let w = eyeSize * (0.45 + 0.45 * smile)
+            var curve = Path()
+            curve.move(to: CGPoint(x: mc.x - w / 2, y: mc.y - eyeSize * 0.12))
+            curve.addQuadCurve(to: CGPoint(x: mc.x + w / 2, y: mc.y - eyeSize * 0.12),
+                               control: CGPoint(x: mc.x, y: mc.y + eyeSize * (0.12 + 0.35 * smile)))
+            layer.stroke(curve, with: .color(ink.opacity(min(1, smile * 3))),
+                         style: StrokeStyle(lineWidth: eyeSize * 0.15, lineCap: .round))
+        }
         // Mouth: a little "o" for humming, gasps and yawns
         if idle.mouth > 0.02 {
             let m = idle.mouth
-            let mc = CGPoint(x: (l.x + r.x) / 2, y: max(l.y, r.y) + eyeSize * 1.05)
             let w = eyeSize * (0.32 + 0.3 * m), h = eyeSize * (0.12 + 0.95 * m)
             let mouth = Path(ellipseIn: CGRect(x: mc.x - w / 2, y: mc.y - h / 2, width: w, height: h))
             layer.fill(mouth, with: .color(ink.opacity(min(1, m * 4))))
@@ -155,6 +180,8 @@ enum AvatarRenderer {
             }
         }
 
+        if idle.puff > 0.01 { drawPuff(idle.puff, age: idle.puffAge, at: mc, eye: eyeSize, in: &layer) }
+        if idle.sparkle > 0.01 { drawSparkles(idle.sparkle, side: f.look.x >= 0 ? 1 : -1, time: f.time, unit: unit, in: &world) }
         if idle.zzz > 0.01 { drawZzz(idle.zzz, time: f.time, unit: unit, in: &world) }
         if idle.notes > 0.01 { drawNotes(idle.notes, time: f.time, unit: unit, in: &world) }
         if idle.flyAlpha > 0.01 {
@@ -190,11 +217,15 @@ enum AvatarRenderer {
     }
 
     /// `inner` is the direction toward the nose (+1 for the left eye), for slanted lids.
-    static func drawEye(at c: CGPoint, size e: CGFloat, inner: CGFloat, f: AvatarEngine.Frame, body: Color,
-                        in ctx: inout GraphicsContext) {
+    /// `wink` (0...1) closes this eye alone into a happy arc.
+    static func drawEye(at c: CGPoint, size e: CGFloat, inner: CGFloat, wink: Double, f: AvatarEngine.Frame,
+                        body: Color, in ctx: inout GraphicsContext) {
+        let idle = f.idle
         let open = max(0.06, f.face.eyeOpen * f.blink)
-        let roundAmount = 1 - f.face.crescent
-        let spiral = f.idle.spiral
+        let crescent = max(f.face.crescent, wink)
+        let closed = max(0, min(1, idle.closed)) * (1 - crescent)
+        let roundAmount = (1 - crescent) * (1 - closed)
+        let spiral = idle.spiral
 
         // Round googly eye: white ball, big black pupil that looks around
         if roundAmount > 0.01 {
@@ -205,7 +236,7 @@ enum AvatarRenderer {
             eye.fill(ball, with: .color(.white))
             var inside = eye
             inside.clip(to: ball)
-            let pr = e * 0.42
+            let pr = e * 0.42 * CGFloat(max(0.4, min(1.45, idle.pupil)))
             let px = c.x + f.look.x * e * 0.32
             let py = c.y + f.look.y * e * 0.26
             if spiral < 0.99 {
@@ -213,9 +244,14 @@ enum AvatarRenderer {
                 pupil.opacity = 1 - spiral
                 pupil.fill(Path(ellipseIn: CGRect(x: px - pr, y: py - pr, width: pr * 2, height: pr * 2)),
                            with: .color(ink))
-                // Catch light
+                // Catch light (a second, smaller one on big dreamy pupils)
                 pupil.fill(Path(ellipseIn: CGRect(x: px - pr * 0.1, y: py - pr * 0.75, width: pr * 0.5, height: pr * 0.5)),
                            with: .color(.white.opacity(0.85)))
+                if idle.pupil > 1.1 {
+                    let k = min(1, (idle.pupil - 1.1) * 4)
+                    pupil.fill(Path(ellipseIn: CGRect(x: px - pr * 0.55, y: py + pr * 0.2, width: pr * 0.24, height: pr * 0.24)),
+                               with: .color(.white.opacity(0.7 * k)))
+                }
             }
             // Dizzy: a turning spiral instead of the pupil
             if spiral > 0.01 {
@@ -233,24 +269,42 @@ enum AvatarRenderer {
                 }
                 swirl.stroke(path, with: .color(ink), style: StrokeStyle(lineWidth: e * 0.11, lineCap: .round, lineJoin: .round))
             }
-            // Determined squint: flat lids, lower toward the nose
-            if f.idle.squint > 0.01 {
-                let s = f.idle.squint
+            // Top lid: half lids, sleepy droop, suspicious or sad slants, the
+            // determined squint. The edge bows down a little, like a real lid.
+            let cover = min(0.95, idle.lidTop + 0.5 * idle.squint)
+            if cover > 0.01 {
+                let slant = (idle.lidSlant + 0.48 * idle.squint) * min(1, cover * 4)
                 let top = c.y - h / 2
-                let outerY = top + h * s * 0.38
-                let innerY = top + h * s * 0.62
-                let outerX = c.x - inner * w / 2, innerX = c.x + inner * w / 2
+                let outerY = top + h * CGFloat(max(0, min(1, cover - 0.25 * slant)))
+                let innerY = top + h * CGFloat(max(0, min(1, cover + 0.25 * slant)))
+                let outerX = c.x - inner * w * 0.6, innerX = c.x + inner * w * 0.6
+                let bow = h * 0.1 * CGFloat(min(1, cover * 3))
+                let control = CGPoint(x: c.x, y: (outerY + innerY) / 2 + bow)
                 var lid = Path()
                 lid.move(to: CGPoint(x: outerX, y: top - e))
                 lid.addLine(to: CGPoint(x: innerX, y: top - e))
                 lid.addLine(to: CGPoint(x: innerX, y: innerY))
-                lid.addLine(to: CGPoint(x: outerX, y: outerY))
+                lid.addQuadCurve(to: CGPoint(x: outerX, y: outerY), control: control)
                 lid.closeSubpath()
                 inside.fill(lid, with: .color(body))
                 var edge = Path()
                 edge.move(to: CGPoint(x: outerX, y: outerY))
-                edge.addLine(to: CGPoint(x: innerX, y: innerY))
-                inside.stroke(edge, with: .color(ink.opacity(min(1, s * 2))), lineWidth: e * 0.12)
+                edge.addQuadCurve(to: CGPoint(x: innerX, y: innerY), control: control)
+                inside.stroke(edge, with: .color(ink.opacity(min(1, cover * 3))), lineWidth: e * 0.12)
+            }
+            // Bottom lid: rises with a curve up, for smiling and dreamy eyes
+            if idle.lidBottom > 0.01 {
+                let b = CGFloat(min(0.8, idle.lidBottom))
+                let bottom = c.y + h / 2
+                let y = bottom - h * b
+                var lid = Path()
+                lid.move(to: CGPoint(x: c.x - w, y: bottom + e))
+                lid.addLine(to: CGPoint(x: c.x + w, y: bottom + e))
+                lid.addLine(to: CGPoint(x: c.x + w * 0.6, y: y + h * b * 0.35))
+                lid.addQuadCurve(to: CGPoint(x: c.x - w * 0.6, y: y + h * b * 0.35),
+                                 control: CGPoint(x: c.x, y: y - h * b * 0.6))
+                lid.closeSubpath()
+                inside.fill(lid, with: .color(body))
             }
             // Sleepy lid line when nearly closed
             if open < 0.5 {
@@ -261,15 +315,27 @@ enum AvatarRenderer {
             }
         }
 
-        // Happy crescent eye, the designer's "◠" mark
-        if f.face.crescent > 0.01 {
+        // Relaxed closed eye, a soft "◡" (content, sighing, asleep)
+        if closed > 0.01 {
             var eye = ctx
-            eye.opacity = f.face.crescent
+            eye.opacity = closed
+            var arc = Path()
+            let r = e * 0.55
+            arc.addArc(center: CGPoint(x: c.x, y: c.y - r * 0.4), radius: r,
+                       startAngle: .degrees(25), endAngle: .degrees(155), clockwise: false)
+            eye.stroke(arc, with: .color(ink), style: StrokeStyle(lineWidth: e * 0.28, lineCap: .round))
+        }
+
+        // Happy crescent eye, the designer's "◠" mark (also the winking eye)
+        if crescent > 0.01 {
+            var eye = ctx
+            eye.opacity = crescent
             var arc = Path()
             let r = e * 0.62
-            let lift = (1 - open) * e * 0.2
+            let o = max(open, wink)
+            let lift = (1 - o) * e * 0.2
             arc.addArc(center: CGPoint(x: c.x + f.look.x * e * 0.12, y: c.y + r * 0.45 + lift),
-                       radius: r * max(0.4, open),
+                       radius: r * max(0.4, o),
                        startAngle: .degrees(200), endAngle: .degrees(340), clockwise: false)
             eye.stroke(arc, with: .color(crescentInk), style: StrokeStyle(lineWidth: e * 0.38, lineCap: .round))
         }
@@ -291,6 +357,39 @@ enum AvatarRenderer {
             z.addLine(to: CGPoint(x: x + s / 2, y: y + s / 2))
             ctx.stroke(z, with: .color(ink.opacity(0.6 * amount * sin(.pi * p))),
                        style: StrokeStyle(lineWidth: s * 0.2, lineCap: .round, lineJoin: .round))
+        }
+    }
+
+    /// A small breath cloud drifting out of the mouth and fading (a sigh).
+    static func drawPuff(_ amount: Double, age: Double, at mouth: CGPoint, eye e: CGFloat,
+                         in ctx: inout GraphicsContext) {
+        let fade = amount * sin(.pi * max(0, min(1, age)))
+        guard fade > 0.01 else { return }
+        let shade = GraphicsContext.Shading.color(.white.opacity(0.7 * fade))
+        for i in 0..<3 {
+            let k = CGFloat(i)
+            let d = CGFloat(age) * e * (1.6 + k * 0.5)
+            let r = e * (0.16 + 0.1 * k) * (0.6 + CGFloat(age))
+            let x = mouth.x + e * 0.4 + d, y = mouth.y + e * 0.1 - d * 0.35 + k * e * 0.05
+            ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)), with: shade)
+        }
+    }
+
+    /// Little four point sparkles twinkling above, on the side it is dreaming toward.
+    static func drawSparkles(_ amount: Double, side: CGFloat, time: Double, unit: CGFloat,
+                             in ctx: inout GraphicsContext) {
+        for i in 0..<3 {
+            let k = Double(i)
+            let tw = 0.5 + 0.5 * sin(time * (2.2 + k * 0.7) + k * 2.1)
+            let s = unit * (0.05 + 0.035 * CGFloat(tw))
+            let x = side * unit * (0.45 + 0.28 * CGFloat(k)), y = -unit * (0.95 + 0.18 * CGFloat(i % 2)) + unit * 0.1 * CGFloat(k)
+            var star = Path()
+            star.move(to: CGPoint(x: x, y: y - s))
+            star.addQuadCurve(to: CGPoint(x: x + s, y: y), control: CGPoint(x: x, y: y))
+            star.addQuadCurve(to: CGPoint(x: x, y: y + s), control: CGPoint(x: x, y: y))
+            star.addQuadCurve(to: CGPoint(x: x - s, y: y), control: CGPoint(x: x, y: y))
+            star.addQuadCurve(to: CGPoint(x: x, y: y - s), control: CGPoint(x: x, y: y))
+            ctx.fill(star, with: .color(.white.opacity(0.9 * amount * (0.35 + 0.65 * tw))))
         }
     }
 

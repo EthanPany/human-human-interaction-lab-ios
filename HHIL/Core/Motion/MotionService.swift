@@ -33,6 +33,11 @@ final class MotionService {
     // Shake detector: short window of strong, direction changing acceleration
     @ObservationIgnored private var shakeLoad = 0.0
     @ObservationIgnored private var lastAccel = CMAcceleration(x: 0, y: 0, z: 0)
+    /// The observed tilt only changes every other sample (30 Hz) and only when
+    /// it really moved, so the 60 Hz feed does not re-render the views that read it.
+    @ObservationIgnored private var tiltTick = 0
+    @ObservationIgnored private var smoothTiltX = 0.0
+    @ObservationIgnored private var smoothTiltY = 0.0
 
     func start() {
         users += 1
@@ -40,7 +45,7 @@ final class MotionService {
         let now = Date.timeIntervalSinceReferenceDate
         snapshot.stillSince = now
         if manager.isDeviceMotionAvailable {
-            manager.deviceMotionUpdateInterval = 1.0 / 30
+            manager.deviceMotionUpdateInterval = 1.0 / 60 // the avatar's jelly physics reads raw acceleration
             manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
                 guard let self, let motion else { return }
                 MainActor.assumeIsolated { self.update(motion) }
@@ -98,19 +103,31 @@ final class MotionService {
 
     private func update(_ m: CMDeviceMotion) {
         let now = Date.timeIntervalSinceReferenceDate
-        let k = 0.12 // low pass
+        let k = 0.065 // low pass (tuned for 60 Hz, same feel as 0.12 at 30 Hz)
         let x = max(-1, min(1, m.gravity.x * 1.6))
         let y = max(-1, min(1, (m.gravity.y + 0.6) * 1.6)) // upright phone reads about -0.6
-        tiltX += (x - tiltX) * k
-        tiltY += (y - tiltY) * k
+        smoothTiltX += (x - smoothTiltX) * k
+        smoothTiltY += (y - smoothTiltY) * k
         let a = m.userAcceleration
         let raw = sqrt(a.x * a.x + a.y * a.y + a.z * a.z) // in g
         let magnitude = min(1, raw * 2.5)
-        energy += (magnitude - energy) * (magnitude > energy ? 0.3 : 0.04)
+        let e = energy + (magnitude - energy) * (magnitude > energy ? 0.16 : 0.02)
+        tiltTick &+= 1
+        if tiltTick % 2 == 0 {
+            if abs(smoothTiltX - tiltX) > 0.002 { tiltX = smoothTiltX }
+            if abs(smoothTiltY - tiltY) > 0.002 { tiltY = smoothTiltY }
+            if abs(e - energy) > 0.004 { energy = e }
+        }
 
         var s = snapshot
         s.available = true
-        s.energy = energy
+        s.energy = e
+        // Raw feed for the jelly body (device axes, in g and rad/s)
+        s.accelX = a.x
+        s.accelY = a.y
+        s.accelZ = a.z
+        s.rotationZ = m.rotationRate.z
+        s.sampleTime = now
         s.gravityX = m.gravity.x
         s.gravityY = m.gravity.y
         s.gravityZ = m.gravity.z
@@ -128,7 +145,7 @@ final class MotionService {
         let dot = a.x * lastAccel.x + a.y * lastAccel.y + a.z * lastAccel.z
         lastAccel = a
         if raw > 0.9 && dot < 0 { shakeLoad += 1 }
-        shakeLoad *= 0.93
+        shakeLoad *= 0.965 // per sample at 60 Hz (0.93 at 30 Hz)
         if shakeLoad > 4.5 {
             s.lastShake = now
             shakeLoad = 0
@@ -136,7 +153,7 @@ final class MotionService {
 
         // Steps: vertical acceleration (along gravity) rising through a threshold
         let v = -(a.x * m.gravity.x + a.y * m.gravity.y + a.z * m.gravity.z)
-        vertical += (v - vertical) * 0.45
+        vertical += (v - vertical) * 0.28 // 60 Hz
         if vertical < -0.04 { verticalArmed = true }
         if verticalArmed && vertical > 0.08 {
             verticalArmed = false
@@ -174,6 +191,13 @@ struct MotionSnapshot {
     var stepInterval = 0.55
     /// Steps in a row with a steady rhythm (0 when the rhythm breaks).
     var stepCount = 0
+    /// Latest user acceleration (g, device axes: x right, y toward the top of
+    /// the screen, z out of the screen) and spin around the screen normal (rad/s).
+    var accelX = 0.0
+    var accelY = 0.0
+    var accelZ = 0.0
+    var rotationZ = 0.0
+    var sampleTime = -1000.0
 
     /// Screen toward the floor (lying face down, or the badge flipped around).
     var faceDown: Bool { gravityZ > 0.75 }

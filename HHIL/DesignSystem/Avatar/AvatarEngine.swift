@@ -12,6 +12,9 @@ import CoreGraphics
 ///   5. Idle activities (IdleDirector): what it is doing when nobody is near,
 ///      picked from what the wearer is doing. Full strength in the idle
 ///      expression, a light touch of the body motion in the others.
+///   6. Jelly body (JellyBody): lags behind, jiggles and leans with the
+///      phone's own acceleration and spin, in every expression. A jolt
+///      startles the face and long shaking makes it dizzy (idle face only).
 final class AvatarEngine {
     struct Frame {
         var phase: Double
@@ -24,6 +27,7 @@ final class AvatarEngine {
         var breathe: Double    // scale around 1
         var time: Double       // seconds, for drawn extras
         var idle: IdlePose     // already weighted by how idle the face is
+        var jelly: JellyBody.Output
     }
 
     private var rng: SeededRandom
@@ -42,6 +46,7 @@ final class AvatarEngine {
     private var breathePhase = 0.0
     private let director: IdleDirector
     private var idleWeight = 1.0
+    private var jelly = JellyBody()
 
     init(seed: Int, shape: AvatarShapeKind) {
         rng = SeededRandom(seed: UInt64(truncatingIfNeeded: seed &+ 7))
@@ -59,7 +64,49 @@ final class AvatarEngine {
         idleWeight += ((expression == .idle ? 1 : 0) - idleWeight) * (1 - exp(-dt * 3))
         let raw = director.step(time: t, motion: motion, calm: reduceMotion)
         let bodyWeight = idleWeight + (1 - idleWeight) * (director.kind.isActivity ? 0.35 : 0)
-        let idle = IdlePose.mix(IdlePose(), raw, face: idleWeight, body: bodyWeight)
+        var idle = IdlePose.mix(IdlePose(), raw, face: idleWeight, body: bodyWeight)
+
+        // 6. Jelly body from the phone's motion, and the faces it causes
+        jelly.step(dt: dt, time: t, motion: motion, strength: reduceMotion ? 0.35 : 1, allowDizzy: !reduceMotion)
+        let jo = jelly.output
+        let shock = jo.shock * idleWeight
+        if shock > 0.001 {
+            // Startled: eyes pop open with tiny pupils, an "o" mouth, lids fly up
+            let calmer = 1 - shock
+            idle.lidTop *= calmer
+            idle.lidBottom *= calmer
+            idle.squint *= calmer
+            idle.closed *= calmer
+            idle.wink *= calmer
+            idle.crescent *= calmer
+            idle.eyeScale += (1.32 - idle.eyeScale) * shock
+            idle.eyeOpen += (1.2 - idle.eyeOpen) * shock
+            idle.pupil += (0.5 - idle.pupil) * shock
+            idle.mouth = max(idle.mouth, 0.5 * shock)
+            idle.blinkRate *= calmer
+            idle.gaze = CGPoint(x: Double(idle.gaze.x) * calmer,
+                                y: Double(idle.gaze.y) + (-0.15 - Double(idle.gaze.y)) * shock)
+            idle.gazeSpeed = max(idle.gazeSpeed, 28)
+            idle.outside *= calmer
+        }
+        let dizzy = jo.dizzy * idleWeight
+        if dizzy > 0.001 {
+            // Spinning eyes, a wobbly sway and a wavy little mouth
+            let calmer = 1 - dizzy
+            idle.spiral = max(idle.spiral, dizzy)
+            idle.lidTop = idle.lidTop * calmer + 0.15 * dizzy
+            idle.closed *= calmer
+            idle.crescent *= calmer
+            idle.wink *= calmer
+            idle.sway += 0.1 * sin(t * 5) * dizzy
+            idle.squash += 0.04 * sin(t * 7.3) * dizzy
+            idle.mouth = max(idle.mouth, 0.15 * dizzy)
+            idle.blinkRate *= calmer
+            idle.outside *= calmer
+            idle.gaze = CGPoint(x: Double(idle.gaze.x) * calmer + 0.4 * cos(t * 6) * dizzy,
+                                y: Double(idle.gaze.y) * calmer + 0.3 * sin(t * 6) * dizzy)
+            idle.gazeSpeed = max(idle.gazeSpeed, 20)
+        }
 
         // 1. Shape morph
         if shape != shapeTo {
@@ -81,7 +128,7 @@ final class AvatarEngine {
                 nextBlink = t + 0.3 // hold the stare
             } else {
                 blinkStart = t
-                doubleBlink = rng.next() < 0.2
+                doubleBlink = rng.next() < idle.blinkDouble
             }
         }
         var blink = 1.0
@@ -142,7 +189,8 @@ final class AvatarEngine {
             squash: squash,
             breathe: 1 + (0.018 + idle.breatheDepth) * sin(breathePhase),
             time: t,
-            idle: idle
+            idle: idle,
+            jelly: jo
         )
     }
 
