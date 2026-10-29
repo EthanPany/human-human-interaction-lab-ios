@@ -73,6 +73,7 @@ struct SettingsView: View {
                 Text("Links, handles and a QR code you can share with people you meet. Nothing is shared until you choose to.")
             }
 
+            WatchSection()
             NearbySection()
             LocationSection()
             DemoSection()

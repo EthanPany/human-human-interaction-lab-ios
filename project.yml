@@ -17,6 +17,8 @@ targets:
       - path: HHIL
         excludes:
           - "Resources/Fonts/*.txt"
+      # The phone and watch message format (Core/Watch/WatchBridge.swift)
+      - path: WatchShared
     scheme:
       testTargets:
         - HHILUITests

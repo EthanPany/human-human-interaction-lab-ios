@@ -89,6 +89,8 @@ final class BadgeStore {
     private var consentAnswered: Set<String> = []
     /// Everyone nearby from every source (NearbyService, about twice a second).
     private var presence: [String: PeerPresence] = [:]
+    /// Everyone nearby right now (read by the Apple Watch bridge for its list).
+    var nearbyPeople: [PeerPresence] { Array(presence.values) }
     /// Which side edge each person glows on (stable while they are around).
     private var edgeSides: [String: EdgeGlow.Side] = [:]
     /// The server reading last used in place of our own UWB, per peer.

@@ -17,6 +17,8 @@ final class AppEnvironment {
     let sharing: SharingStore
     /// My group encounters (three or more together) for the People list.
     let groups: GroupStore
+    /// The Apple Watch companion (Core/Watch/WatchBridge.swift).
+    let watch: WatchBridge
     let usingMock: Bool
     /// The person you're with or met most recently (iPhone Duo opens to them).
     private(set) var currentPersonId: String?
@@ -32,6 +34,7 @@ final class AppEnvironment {
         location = LocationReporter(backend: backend)
         sharing = SharingStore(backend: backend)
         groups = GroupStore(backend: backend)
+        watch = WatchBridge(backend: backend, session: session, badge: badge, sharing: sharing, router: router)
         let badgeStore = badge
         let nearbyService = nearby
         nearby.onDistance = { [weak badgeStore, weak nearbyService] peerId, meters in
@@ -84,6 +87,7 @@ final class AppEnvironment {
             nearby.stop()
             sharing.stop()
             groups.stop()
+            watch.reset()
             location.stop()
             currentPersonId = nil
         }
