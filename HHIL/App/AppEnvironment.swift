@@ -61,7 +61,8 @@ final class AppEnvironment {
         if let userId {
             badge.start(userId: userId)
             nearby.start(userId: userId)
-            location.start(userId: userId)
+            // Mock backend (previews, UI tests): no location prompt
+            if !usingMock { location.start(userId: userId) }
             currentPersonTask = Task { [backend] in
                 do {
                     for try await id in backend.currentPerson(userId: userId) { self.currentPersonId = id }
