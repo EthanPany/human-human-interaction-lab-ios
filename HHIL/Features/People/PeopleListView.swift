@@ -13,6 +13,9 @@ struct PeopleListView: View {
     @State private var people: [PersonSummary] = []
     @State private var search = ""
     @State private var columns: NavigationSplitViewVisibility = .all
+    @State private var query = PeopleQuery()
+    @AppStorage("people.groupBy") private var grouping: PeopleQuery.Grouping = .none
+    @State private var showCustomDates = false
 
     var body: some View {
         @Bindable var router = env.router
@@ -30,8 +33,31 @@ struct PeopleListView: View {
     }
 
     private func sidebar(selection: Binding<String?>) -> some View {
-        List(filtered, selection: selection) { person in
-            NavigationLink(value: person.id) { PersonRow(person: person) }
+        let shown = filtered
+        return List(selection: selection) {
+            // Share requests waiting for my answer
+            if !env.sharing.inbox.isEmpty && search.isEmpty {
+                Section("Waiting for you") {
+                    ForEach(env.sharing.inbox) { request in
+                        ShareRequestCard(request: request, fromName: request.from?.displayName ?? "Someone",
+                                         from: request.from)
+                            .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
+                            .listRowBackground(Color.clear)
+                    }
+                }
+            }
+            if query.isFiltering && !people.isEmpty {
+                filterSummary(shown: shown.count)
+            }
+            ForEach(query.groups(shown, by: grouping)) { group in
+                Section {
+                    ForEach(group.people) { person in
+                        NavigationLink(value: person.id) { PersonRow(person: person) }
+                    }
+                } header: {
+                    if let title = group.title { Text(title) }
+                }
+            }
         }
         .overlay {
             if people.isEmpty {
@@ -40,22 +66,46 @@ struct PeopleListView: View {
                     systemImage: "person.2",
                     description: Text("People you meet show up here, with a summary after you talk.")
                 )
+            } else if shown.isEmpty {
+                ContentUnavailableView.search(text: search)
             }
         }
         .scrollContentBackground(.hidden)
         .background(theme.background)
-        .searchable(text: $search, prompt: "Search people")
+        .searchable(text: $search, prompt: "Name, company, topic or note")
         .navigationTitle("People")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                PeopleFilterMenu(query: $query, grouping: $grouping, showCustomDates: $showCustomDates)
+            }
+        }
+        .sheet(isPresented: $showCustomDates) { PeopleDateRangeSheet(query: $query) }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: query)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: grouping)
         .navigationSplitViewColumnWidth(min: theme.sidebarMinWidth, ideal: theme.sidebarIdealWidth,
                                         max: theme.sidebarMaxWidth)
     }
 
-    private var filtered: [PersonSummary] {
-        guard !search.isEmpty else { return people }
-        return people.filter {
-            $0.displayName.localizedCaseInsensitiveContains(search)
-                || ($0.headline ?? "").localizedCaseInsensitiveContains(search)
+    /// "4 of 9 · Matches, Met in person" with a Clear button.
+    private func filterSummary(shown: Int) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal.decrease").foregroundStyle(theme.inkSecondary)
+            Text("\(shown) of \(people.count), \(query.activeLabels.joined(separator: ", "))")
+                .font(theme.caption).foregroundStyle(theme.inkSecondary).lineLimit(2)
+            Spacer()
+            Button("Clear") {
+                Feedback.shared.play(.buttonPress)
+                query.clear()
+            }
+            .font(theme.caption.weight(.semibold))
+            .buttonStyle(.borderless)
         }
+        .listRowBackground(Color.clear)
+    }
+
+    /// Search (name, role, company, tags, topics, notes) and filters.
+    private var filtered: [PersonSummary] {
+        query.apply(people, search: search)
     }
 
     private func load() async {
@@ -106,11 +156,17 @@ private struct PersonRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AvatarView(shape: person.avatar.shape, color: person.avatar.color,
-                       expression: .happy, animated: false, seed: AvatarStyle.seed(person.id))
+            PersonPhoto(url: person.profilePhotoURL, avatar: person.avatar, seed: AvatarStyle.seed(person.id))
                 .frame(width: 46, height: 46)
             VStack(alignment: .leading, spacing: 2) {
-                Text(person.displayName).font(theme.headline)
+                HStack(spacing: 6) {
+                    Text(person.displayName).font(theme.headline)
+                    if person.sharedWithMe == true {
+                        Image(systemName: "person.crop.rectangle.stack.fill")
+                            .font(theme.caption).foregroundStyle(theme.plezi)
+                            .accessibilityLabel("Shared info with you")
+                    }
+                }
                 if let line = [person.headline, person.company].compactMap({ $0?.nilIfBlank }).joined(separator: " · ").nilIfBlank {
                     Text(line).font(theme.caption).foregroundStyle(theme.inkSecondary).lineLimit(1)
                 } else if let tags = person.tags.prefix(3).joined(separator: " · ").nilIfBlank {
