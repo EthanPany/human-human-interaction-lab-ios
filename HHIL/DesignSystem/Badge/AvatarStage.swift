@@ -5,6 +5,11 @@ import SwiftUI
 /// as the two avatars hopping into each other's badge. At the "we finally met"
 /// moment mine leaps toward theirs too, both land with a squash, and rings
 /// spread out from where they land, like a stone dropped into a lake.
+///
+/// A group (two or more others): mine sits in front, the others on an arc
+/// behind it (up to four, then a "+N" chip). Each newcomer jumps in from its
+/// side as it arrives, mine leaps toward them, and the ripples spread in a
+/// blend of everyone's colors.
 struct AvatarStage: View {
     var avatar: AvatarStyle
     var color: Color
@@ -20,8 +25,11 @@ struct AvatarStage: View {
     /// Goes up at each meet moment: the leap toward each other and the ripples.
     var meetCount = 0
     var rippleColor: Color = .clear
+    /// Everyone with me in a group (empty for a pair or nobody).
+    var group: [StageMember] = []
 
     @Environment(MotionService.self) private var motion
+    @Environment(\.theme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Touch: drag to squish and lean it, tap to make it hop.
@@ -37,8 +45,33 @@ struct AvatarStage: View {
 
     private static let space = "avatarStage"
 
+    private var grouped: Bool { group.count >= 2 }
+
+    /// The others on the stage, and how many more there are.
+    private var shown: [StageMember] { Array(group.prefix(StageMember.shownLimit)) }
+    private var extra: Int { max(0, group.count - StageMember.shownLimit) }
+
+    /// Where each shown member sits (fractions of the stage, from its center) and how big.
+    private static func slots(_ n: Int) -> (points: [CGPoint], scale: CGFloat) {
+        switch n {
+        case ...2: return ([CGPoint(x: -0.3, y: -0.02), CGPoint(x: 0.3, y: -0.02)], 0.46)
+        case 3: return ([CGPoint(x: -0.34, y: 0.06), CGPoint(x: 0, y: -0.16), CGPoint(x: 0.34, y: 0.06)], 0.4)
+        default: return ([CGPoint(x: -0.38, y: 0.1), CGPoint(x: -0.13, y: -0.17), CGPoint(x: 0.13, y: -0.17),
+                          CGPoint(x: 0.38, y: 0.1)], 0.36)
+        }
+    }
+
+    /// The side the newest member came from (-1 left, 1 right): mine looks and leaps that way.
+    private var newestSide: Double {
+        let slots = Self.slots(shown.count).points
+        guard let newest = shown.indices.max(by: { shown[$0].arrival < shown[$1].arrival }) else { return peerSide }
+        let x = slots[min(newest, slots.count - 1)].x
+        return x == 0 ? peerSide : (x < 0 ? -1 : 1)
+    }
+
     private var myLook: CGPoint? {
         if touching, let finger { return finger }
+        if grouped { return CGPoint(x: newestSide * 0.6, y: -0.4) }
         if hasMet { return CGPoint(x: peerSide, y: 0) }
         if let look { return look }
         return followsTilt ? CGPoint(x: motion.tiltX, y: motion.tiltY * 0.6) : nil
@@ -47,13 +80,18 @@ struct AvatarStage: View {
     var body: some View {
         GeometryReader { geo in
             let size = min(geo.size.width, geo.size.height)
-            let mySize = hasMet ? size * 0.72 : size
-            let home = CGPoint(x: geo.size.width / 2 + (hasMet ? -peerSide * size * 0.2 : 0),
-                               y: geo.size.height / 2 + (hasMet ? size * 0.12 : 0))
+            let mySize = grouped ? size * 0.56 : hasMet ? size * 0.72 : size
+            let myOffset = grouped ? CGSize(width: 0, height: size * 0.2)
+                : CGSize(width: hasMet ? -peerSide * size * 0.2 : 0, height: hasMet ? size * 0.12 : 0)
+            let home = CGPoint(x: geo.size.width / 2 + myOffset.width, y: geo.size.height / 2 + myOffset.height)
             ZStack {
                 MeetRipples(color: rippleColor, trigger: meetCount)
                     .frame(width: size * 1.6, height: size * 0.5)
                     .offset(y: size * 0.4)
+
+                if grouped {
+                    groupMembers(size: size)
+                }
 
                 AvatarView(
                     shape: avatar.shape,
@@ -82,12 +120,12 @@ struct AvatarStage: View {
                         SpringKeyframe(1, duration: 0.35, spring: .bouncy)
                     }
                 }
-                .modifier(MeetLeap(trigger: reduceMotion ? 0 : meetCount, side: peerSide, size: mySize))
+                .modifier(MeetLeap(trigger: reduceMotion ? 0 : meetCount, side: grouped ? newestSide : peerSide, size: mySize))
                 .contentShape(Circle().scale(0.8))
                 .gesture(touch(size: mySize, home: home))
-                .offset(x: hasMet ? -peerSide * size * 0.2 : 0, y: hasMet ? size * 0.12 : 0)
+                .offset(myOffset)
 
-                if hasMet, let peer {
+                if hasMet, !grouped, let peer {
                     AvatarView(
                         shape: peer.shape,
                         color: peer.color,
@@ -104,6 +142,42 @@ struct AvatarStage: View {
             .frame(width: geo.size.width, height: geo.size.height)
             .coordinateSpace(.named(Self.space))
             .animation(.spring(response: 0.7, dampingFraction: 0.62), value: hasMet)
+            .animation(.spring(response: 0.7, dampingFraction: 0.62), value: group.map(\.id))
+        }
+    }
+
+    /// The others in a group on an arc behind mine, each jumping in from its own side as it arrives.
+    @ViewBuilder
+    private func groupMembers(size: CGFloat) -> some View {
+        let layout = Self.slots(shown.count)
+        let side = size * layout.scale
+        ForEach(Array(shown.enumerated()), id: \.element.id) { index, member in
+            let p = layout.points[min(index, layout.points.count - 1)]
+            let from: Double = p.x == 0 ? (AvatarStyle.seed(member.id) % 2 == 0 ? -1 : 1) : (p.x < 0 ? -1 : 1)
+            AvatarView(
+                shape: member.avatar.shape,
+                color: member.avatar.color,
+                expression: expression,
+                look: CGPoint(x: -p.x * 1.5, y: 0.5),
+                seed: member.seed
+            )
+            .frame(width: side, height: side)
+            // Lands with the same squash as the pair's peer, a beat after mine leaps
+            .modifier(MeetLeap(trigger: reduceMotion ? 0 : member.arrival, side: -from, size: side, delay: 0.12))
+            .offset(x: p.x * size, y: p.y * size)
+            .transition(.jumpIn(from: from, distance: size * 1.2, height: size * 0.7))
+        }
+        if extra > 0 {
+            Text("+\(extra)")
+                .font(theme.caption.weight(.bold))
+                .foregroundStyle(theme.strongInk)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(theme.surface, in: Capsule())
+                .shadow(color: theme.shadowColor, radius: theme.shadowRadius, y: theme.shadowY)
+                .offset(x: size * 0.42, y: -size * 0.34)
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
+                .accessibilityLabel("\(extra) more")
         }
     }
 }

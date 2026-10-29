@@ -107,7 +107,9 @@ struct BadgeTabView: View {
 
     private var statusLine: String {
         let state = env.badge.state
-        let name = state.peerName ?? "Someone"
+        // A group names everyone with me ("Maya and Leo")
+        let group = state.mode == .talking && state.isGroup
+        let name = group ? GroupNames.join(state.togetherMembers.map(\.displayName)) : state.peerName ?? "Someone"
         switch state.mode {
         case .idle: return "Swipe up or pinch out to wear it. Your badge reacts when someone you should meet comes close."
         case .match where env.badge.togetherWith == state.peerId:
@@ -115,7 +117,12 @@ struct BadgeTabView: View {
         case .match: return "\(name) is nearby. Your avatar is taking on your shared color."
         case .talking:
             if env.badge.recordingStartedAt != nil { return "You're talking with \(name). Recording for your summary." }
-            if env.badge.waitingForPeerConsent { return "You're talking with \(name). Recording starts when they agree too." }
+            if group, state.isRecorder == false, state.recordingAllowed != false {
+                return "You're talking with \(name). One phone in the group records for everyone."
+            }
+            if env.badge.waitingForPeerConsent {
+                return "You're talking with \(name). Recording starts when \(group ? "everyone agrees" : "they agree too")."
+            }
             if env.badge.peerDeclinedRecording { return "You're talking with \(name). They'd rather not record." }
             return "You're talking with \(name)."
         case .connected: return "\(name) is in your People. Say hi again!"

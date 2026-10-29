@@ -40,12 +40,14 @@ struct BadgeView: View {
             mode: state.mode,
             matched: state.isMatch,
             closeness: env.badge.closeness,
-            // The shared match color, or the badge accent if the server sent none (matches only)
-            matchColor: state.isMatch ? (state.color.map(Color.init(hex:)) ?? theme.yellowStrong) : nil,
+            // The shared match color, or the badge accent if the server sent none (matches only;
+            // a group blends its matched members' pair colors)
+            matchColor: Self.matchColor(state, accent: theme.yellowStrong),
             peerAvatar: state.peerAvatar,
             peerSeed: AvatarStyle.seed(state.peerId ?? ""),
             together: state.peerId != nil && env.badge.togetherWith == state.peerId,
             meetCount: env.badge.meetCount,
+            groupMembers: Self.groupMembers(state, arrivals: env.badge.arrivals),
             edgeGlows: env.badge.edgeGlows,
             isDemo: env.badge.demoMode,
             estimated: env.badge.showsEstimated,
@@ -54,6 +56,23 @@ struct BadgeView: View {
             presentation: presentation,
             orientation: orientation
         )
+    }
+
+    private static func matchColor(_ state: BadgeState, accent: Color) -> Color? {
+        guard state.isMatch else { return nil }
+        if state.mode == .talking, state.isGroup {
+            return Color.blend(state.togetherMembers.filter(\.matched).compactMap { $0.color.map(Color.init(hex:)) }) ?? accent
+        }
+        return state.color.map(Color.init(hex:)) ?? accent
+    }
+
+    /// Everyone with me when we are three or more, first joined first.
+    private static func groupMembers(_ state: BadgeState, arrivals: [String: Int]) -> [StageMember] {
+        guard state.mode == .talking, state.isGroup else { return [] }
+        return state.togetherMembers.map {
+            StageMember(id: $0.id, avatar: $0.avatar, seed: AvatarStyle.seed($0.id), matched: $0.matched,
+                        arrival: arrivals[$0.id] ?? 0)
+        }
     }
 
     /// Match topics from the backend while someone is near, else my own tags

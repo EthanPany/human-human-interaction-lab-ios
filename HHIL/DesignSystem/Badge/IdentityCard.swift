@@ -135,7 +135,8 @@ struct IdentityCard: View {
             hasMet: c.hasMet,
             peerSide: (c.look?.x ?? 1) < 0 ? -1 : 1,
             meetCount: c.meetCount,
-            rippleColor: c.pairColors.map { $0.mine.mix(with: $0.theirs, by: 0.5) } ?? c.avatarColor
+            rippleColor: c.rippleColor,
+            group: c.hasGroup ? c.groupMembers : []
         )
         // The wearer's own idle avatar feels the phone move (walking, shakes, stillness)
         .avatarSensesMotion(c.followsTilt)

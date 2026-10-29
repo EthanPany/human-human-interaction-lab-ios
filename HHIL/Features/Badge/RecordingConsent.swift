@@ -25,7 +25,9 @@ private struct RecordingConsentAlert: ViewModifier {
             Button("Not now", role: .cancel) { env.badge.declineRecording() }
             Button("Record") { env.badge.approveRecording() }
         } message: {
-            Text("California mode is on for one of you. \(env.badge.state.peerName ?? "The other person") is asked too; recording starts only when you both agree.")
+            Text(env.badge.state.isGroup
+                 ? "California mode is on for someone here. Everyone in the group is asked; recording starts only when you all agree."
+                 : "California mode is on for one of you. \(env.badge.state.peerName ?? "The other person") is asked too; recording starts only when you both agree.")
         }
     }
 }

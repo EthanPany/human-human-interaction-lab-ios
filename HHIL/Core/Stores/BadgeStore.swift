@@ -50,8 +50,12 @@ final class BadgeStore {
         }
     }
 
-    /// Goes up by one at each "we finally met" moment (the avatars jump to each other).
+    /// Goes up by one at each "we finally met" moment (the avatars jump to each
+    /// other), and again for each newcomer joining a group.
     private(set) var meetCount = 0
+    /// Everyone on the badge with me right now, and the meetCount when they
+    /// arrived (their own jump in plays once, as they arrive).
+    private(set) var arrivals: [String: Int] = [:]
     /// The person we met and are still standing with (nil once we part).
     private(set) var togetherWith: String?
     /// When the current recording actually started (nil when not recording).
@@ -163,6 +167,7 @@ final class BadgeStore {
         closeness = 0
         metPeerId = nil
         togetherWith = nil
+        arrivals = [:]
         presence = [:]
         edgeGlows = []
         leaveTask?.cancel()
@@ -248,7 +253,7 @@ final class BadgeStore {
     private func updateEdges(now: Date) {
         let range = max(Self.minRespondFrom, state.respondRangeM ?? Self.standardRange)
         var items: [(p: PeerPresence, intensity: Double)] = []
-        for p in presence.values where p.isMatch {
+        for p in presence.values where p.isMatch && arrivals[p.peerId] == nil {
             let far: (meters: Double, coarse: Bool)? = p.inArea ? (range * 1.5, true) : nil
             guard let d = p.distance(now: now) ?? far else { continue }
             let c = Self.closeness(meters: d.meters, range: range)
@@ -343,8 +348,9 @@ final class BadgeStore {
     private func meet(_ peerId: String) {
         let now = Date()
         defer { lastTogether = now }
-        if peerId == metPeerId, now.timeIntervalSince(lastTogether) < Self.meetAgainAfter {
-            togetherWith = peerId // still together (or back after a blip)
+        if peerId == metPeerId || arrivals[peerId] != nil, now.timeIntervalSince(lastTogether) < Self.meetAgainAfter {
+            metPeerId = peerId
+            togetherWith = peerId // still together (or back after a blip, or another member of the group)
             cues.together = true
             return
         }
@@ -382,8 +388,10 @@ final class BadgeStore {
         if localReading?.peerId != new.peerId { localReading = nil }
         updateCloseness()
 
-        // Someone else is the match now, or nobody: we're not standing together anymore.
-        if let together = togetherWith, together != new.peerId {
+        // Someone else is the match now, or nobody: we're not standing together
+        // anymore (in a group, the badge may name another member: still together).
+        if let together = togetherWith, together != new.peerId,
+           !(new.mode == .talking && new.togetherMembers.contains { $0.id == together }) {
             togetherWith = nil
             cues.together = false
         }
@@ -392,6 +400,7 @@ final class BadgeStore {
             if togetherWith != peerId { togetherEstimated = new.estimated == true }
             meet(peerId)
         }
+        updateArrivals(new, shown: isWorn || (demo && isPreviewVisible))
         // The demo never records or tells the server anything.
         guard !demo else { return }
 
@@ -405,7 +414,7 @@ final class BadgeStore {
                 if let old = activeConversationId { await leave(old) }
                 activeConversationId = id
             }
-            updateRecording(new)
+            await updateRecording(new)
         }
 
         // Left the conversation: after a short grace, stop, upload what we have, trigger follow ups
@@ -418,16 +427,51 @@ final class BadgeStore {
         }
     }
 
-    /// Record when this person records conversations and, if either of us has
-    /// California mode on, once both said yes (asked once per encounter; coming
-    /// back within 5 minutes keeps the answers and appends to the recording).
-    private func updateRecording(_ s: BadgeState) {
-        guard let id = activeConversationId, id == s.conversationId, s.recordConversations else { return }
-        if s.needsConsent, s.myConsent == nil, !consentAnswered.contains(id) {
+    /// Record when this person records conversations and, if anyone here has
+    /// California mode on, once everyone said yes (asked once per encounter;
+    /// coming back within 5 minutes keeps the answers and appends to the
+    /// recording). A group records on one phone: when this phone stops being
+    /// the one (or a newcomer pauses it for their answer), what it has so far
+    /// is uploaded and it stays in the encounter.
+    private func updateRecording(_ s: BadgeState) async {
+        guard let id = activeConversationId, id == s.conversationId else { return }
+        if s.recordConversations, s.needsConsent, s.myConsent == nil, !consentAnswered.contains(id) {
             pendingConsentConversationId = id
         }
-        guard s.mayRecord, recordingTask == nil else { return }
+        if recordingTask != nil, !s.mayRecord || !s.recordConversations {
+            await upload(id, leaving: false)
+            return
+        }
+        guard s.recordConversations, s.mayRecord, recordingTask == nil else { return }
         startRecording()
+    }
+
+    /// Group arrivals: the first people are the meet moment (meet above); each
+    /// newcomer after them jumps in on their own, with the meet sound, and
+    /// mine leaps toward them. People who left drop off the badge.
+    private func updateArrivals(_ s: BadgeState, shown: Bool) {
+        let members = s.mode == .talking && shown ? s.togetherMembers : []
+        guard !members.isEmpty else {
+            if togetherWith == nil, !arrivals.isEmpty { arrivals = [:] }
+            return
+        }
+        let ids = Set(members.map(\.id))
+        var next = arrivals.filter { ids.contains($0.key) }
+        let first = next.isEmpty
+        for m in members where next[m.id] == nil {
+            if first {
+                next[m.id] = meetCount // arrived with the meet moment
+            } else {
+                meetCount += 1
+                next[m.id] = meetCount
+                lastMeetAt = Date()
+                Task {
+                    try? await Task.sleep(for: .seconds(0.5))
+                    self.cues.met()
+                }
+            }
+        }
+        if next != arrivals { arrivals = next }
     }
 
     /// Badge put on or taken off. Off for longer than the grace ends the conversation here.
@@ -453,7 +497,13 @@ final class BadgeStore {
 
     /// Stop recording (if any), upload the transcript, trigger follow ups.
     private func finish(_ id: String) async {
+        await upload(id, leaving: true)
+    }
+
+    /// Stop recording (if any) and upload what it heard. `leaving`: I left the encounter.
+    private func upload(_ id: String, leaving: Bool) async {
         var transcript: String?
+        let started = recordingStartedAt
         if let starting = recordingTask {
             recordingTask = nil
             starting.cancel()
@@ -462,7 +512,13 @@ final class BadgeStore {
         }
         recordingStartedAt = nil
         stopMeter()
-        try? await backend.finishConversation(id: id, transcript: transcript)
+        guard leaving || transcript != nil else { return }
+        if let userId {
+            try? await backend.uploadTranscript(userId: userId, conversationId: id, transcript: transcript,
+                                                startedAt: started, leaving: leaving)
+        } else {
+            try? await backend.finishConversation(id: id, transcript: transcript)
+        }
     }
 
     private func startRecording() {
@@ -515,14 +571,15 @@ final class BadgeStore {
 
     /// The demo's timeline, seconds: Maya walks up from 9 m to 0.8 m over 20 s
     /// while Leo comes within 3.5 m and waits (both edges glow), Maya and you
-    /// meet and stay together for 10 s, then both walk away. Then again.
-    private static let demoRound: TimeInterval = 42
+    /// meet, then Leo walks up too and all three of you are together (a group:
+    /// he jumps in beside Maya), then both walk away. Then again.
+    private static let demoRound: TimeInterval = 50
 
     private static func demoMayaMeters(_ t: TimeInterval) -> Double? {
         switch t {
         case ..<20: return 9 - (9 - 0.8) * (t / 20)
-        case ..<30: return 0.8 + 0.05 * sin(t * 1.3)
-        case ..<38: return 0.8 + (9 - 0.8) * ((t - 30) / 8)
+        case ..<38: return 0.8 + 0.05 * sin(t * 1.3)
+        case ..<46: return 0.8 + (9 - 0.8) * ((t - 38) / 8)
         default: return nil
         }
     }
@@ -531,8 +588,10 @@ final class BadgeStore {
         switch t {
         case ..<4: return nil
         case ..<16: return 9 - (9 - 3.5) * ((t - 4) / 12)
-        case ..<30: return 3.5 + 0.3 * sin(t * 0.8)
-        case ..<36: return 3.5 + (9 - 3.5) * ((t - 30) / 6)
+        case ..<24: return 3.5 + 0.3 * sin(t * 0.8)
+        case ..<28: return 3.5 - (3.5 - 0.9) * ((t - 24) / 4)
+        case ..<38: return 0.9 + 0.05 * sin(t * 1.1)
+        case ..<44: return 0.9 + (9 - 0.9) * ((t - 38) / 6)
         default: return nil
         }
     }
@@ -564,6 +623,11 @@ final class BadgeStore {
         cues.together = false
         closeness = 0
         cues.approach(closeness: 0)
+    }
+
+    private func demoMember(_ p: DemoPeer, joinedAt: Double) -> BadgeMember {
+        BadgeMember(id: p.id, name: p.name, avatarShape: p.shape, avatarColor: p.color, matched: true,
+                    color: p.pairColor, joinedAt: joinedAt)
     }
 
     private func demoState(_ p: DemoPeer, mode: BadgeMode, meters: Double) -> BadgeState {
@@ -599,6 +663,7 @@ final class BadgeStore {
                                pairColor: "#FFD60A", tag: "Robotics", keywords: ["Robot arms", "Hackathons"])
             let start = Date()
             var together: Date?
+            var leoClose: Date?
             while !Task.isCancelled, demoMode {
                 let now = Date()
                 let t = now.timeIntervalSince(start)
@@ -607,8 +672,16 @@ final class BadgeStore {
                 let leoM = Self.demoLeoMeters(t)
                 if let m = mayaM {
                     if togetherWith == maya.id { together = together ?? now } else { together = nil }
-                    let talking = t < 30 && together.map { now.timeIntervalSince($0) >= 1 } == true
-                    await apply(demoState(maya, mode: talking ? .talking : .match, meters: m), demo: true)
+                    let talking = t < 38 && together.map { now.timeIntervalSince($0) >= 1 } == true
+                    var s = demoState(maya, mode: talking ? .talking : .match, meters: m)
+                    if talking {
+                        // Leo within 1 m for a second while we talk: all three of us are one group
+                        if let l = leoM, l <= Self.meetDistance { leoClose = leoClose ?? now } else { leoClose = nil }
+                        let leoJoined = leoClose.map { now.timeIntervalSince($0) >= 1 } == true
+                        s.members = [demoMember(maya, joinedAt: 1)] + (leoJoined ? [demoMember(leo, joinedAt: 2)] : [])
+                        s.group = leoJoined
+                    }
+                    await apply(s, demo: true)
                     ingest(peerId: maya.id, meters: m, maxRange: Self.standardRange, estimated: false)
                 } else if state.mode != .idle {
                     await apply(.idle, demo: true)
