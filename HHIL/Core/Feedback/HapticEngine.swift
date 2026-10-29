@@ -15,13 +15,11 @@ final class HapticEngine {
     private let light = UIImpactFeedbackGenerator(style: .light)
     private let soft = UIImpactFeedbackGenerator(style: .soft)
     private let rigid = UIImpactFeedbackGenerator(style: .rigid)
-    private let selection = UISelectionFeedbackGenerator()
-    private let notification = UINotificationFeedbackGenerator()
 
     enum Impact { case light, soft, rigid }
 
     func prepare() {
-        light.prepare(); soft.prepare(); selection.prepare()
+        light.prepare(); soft.prepare(); rigid.prepare()
     }
 
     func impact(_ kind: Impact, intensity: Double) {
@@ -33,9 +31,10 @@ final class HapticEngine {
         }
     }
 
-    func selectionTick() { selection.selectionChanged() }
-    func success() { notification.notificationOccurred(.success) }
-    func failure() { notification.notificationOccurred(.error) }
+    /// A light tick (the system selection tick has no strength, so the Settings level could not apply).
+    func selectionTick() { impact(.light, intensity: 0.4) }
+    /// Two firm taps, scaled by the Settings strength like every other cue.
+    func failure() { pattern([(0, 0.8, 0.6), (0.12, 0.8, 0.6)]) }
 
     /// Transient taps: (time s, intensity, sharpness). Falls back to one soft impact.
     func pattern(_ taps: [(Double, Double, Double)]) {
@@ -65,12 +64,14 @@ final class HapticEngine {
             impact(.soft, intensity: 1)
             return
         }
+        // Every level here is scaled by the Settings strength
+        let gain = Float(min(1, Feedback.hapticGain))
         let hit = CHHapticEvent(eventType: .hapticTransient, parameters: [
-            CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
+            CHHapticEventParameter(parameterID: .hapticIntensity, value: gain),
             CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.08),
         ], relativeTime: 0)
         let rumble = CHHapticEvent(eventType: .hapticContinuous, parameters: [
-            CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.55),
+            CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.55 * gain),
             CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.02),
         ], relativeTime: 0.03, duration: 1.1)
         // Decay the rumble from full to nothing, fast at first, then slowly
@@ -83,7 +84,7 @@ final class HapticEngine {
         // Two faint after ripples (the fade above scales them down too)
         let ripples = [(0.32, 0.45), (0.6, 0.35)].map { t, i in
             CHHapticEvent(eventType: .hapticTransient, parameters: [
-                CHHapticEventParameter(parameterID: .hapticIntensity, value: Float(i)),
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: Float(i) * gain),
                 CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.05),
             ], relativeTime: t)
         }
@@ -121,8 +122,9 @@ final class HapticEngine {
         guard force || now - lastSquishUpdate > 1.0 / 30 else { return }
         lastSquishUpdate = now
         let s = Float(max(0, min(1, stretch)))
+        let gain = Float(Feedback.hapticGain)
         try? player.sendParameters([
-            CHHapticDynamicParameter(parameterID: .hapticIntensityControl, value: 0.08 + 0.42 * s, relativeTime: 0),
+            CHHapticDynamicParameter(parameterID: .hapticIntensityControl, value: min(1, (0.08 + 0.42 * s) * gain), relativeTime: 0),
             CHHapticDynamicParameter(parameterID: .hapticSharpnessControl, value: -0.35 + 0.3 * s, relativeTime: 0),
         ], atTime: CHHapticTimeImmediate)
     }

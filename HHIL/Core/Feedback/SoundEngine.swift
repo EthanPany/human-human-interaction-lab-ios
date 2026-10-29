@@ -76,6 +76,8 @@ final class SoundEngine {
 
     func startSquish() {
         guard ensureRunning() else { return }
+        // The live squish voice follows the Settings volume too (it plays through the main mix)
+        engine.mainMixerNode.outputVolume = 0.4 + 0.6 * Float(Feedback.soundLevel)
         squish.set(stretch: 0, motion: 0)
     }
 
