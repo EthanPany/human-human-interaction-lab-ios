@@ -54,6 +54,7 @@ struct PersonDetailView: View {
                 column {
                     identity(d.person)
                     about(d)
+                    sharing(d.person)
                     interests(d.person)
                 }
                 column {
@@ -65,6 +66,7 @@ struct PersonDetailView: View {
             VStack(spacing: 20) {
                 identity(d.person)
                 about(d)
+                sharing(d.person)
                 encounters(d)
                 interests(d.person)
                 timeline(d.timeline)
@@ -90,8 +92,15 @@ struct PersonDetailView: View {
     private func about(_ d: PersonDetail) -> some View {
         let p = d.person
         return Card {
-            if let headline = p.headline?.nilIfBlank {
-                Text(headline).font(theme.body).foregroundStyle(theme.ink)
+            HStack(alignment: .center, spacing: 12) {
+                // Their profile photo, when they set one (the card above keeps the jelly avatar)
+                if let photo = p.profilePhotoURL {
+                    PersonPhoto(url: photo, avatar: p.avatar, seed: AvatarStyle.seed(p.id))
+                        .frame(width: 56, height: 56)
+                }
+                if let headline = p.headline?.nilIfBlank {
+                    Text(headline).font(theme.body).foregroundStyle(theme.ink)
+                }
             }
             if let location = p.location?.nilIfBlank { LocationPill(text: location) }
             HStack(spacing: 8) {
@@ -100,6 +109,11 @@ struct PersonDetailView: View {
                 Text(statusLine(d)).font(theme.caption).foregroundStyle(theme.inkSecondary)
             }
         }
+    }
+
+    /// Contact info both ways: what they share with me, Share my info, Request their info.
+    private func sharing(_ p: PersonProfile) -> some View {
+        PersonSharingCard(personId: p.id, name: p.name?.nilIfBlank ?? "Someone")
     }
 
     @ViewBuilder

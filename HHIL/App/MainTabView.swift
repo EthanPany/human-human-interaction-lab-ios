@@ -54,6 +54,8 @@ struct MainTabView: View {
             Tab("People", systemImage: "person.2", value: AppTab.people) {
                 PeopleListView()
             }
+            // Share requests waiting for an answer
+            .badge(env.sharing.inbox.count)
             Tab("Profile", systemImage: "person.crop.circle", value: AppTab.profile) {
                 ProfileView()
             }
