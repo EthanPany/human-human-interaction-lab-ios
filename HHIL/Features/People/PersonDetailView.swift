@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// One person: who they are, what you talked about, what to do next, and the timeline.
+/// One person: who they are, every encounter (each with its summary and a
+/// follow up), and the timeline.
 /// Live: the summary appears as soon as Claude finishes it.
 ///
 /// Laid out like the Profile tab: the same identity card and interests block,
@@ -53,11 +54,10 @@ struct PersonDetailView: View {
                 column {
                     identity(d.person)
                     about(d)
-                    followUp(d.conversation)
+                    interests(d.person)
                 }
                 column {
-                    summary(d.conversation)
-                    interests(d.person)
+                    encounters(d)
                     timeline(d.timeline)
                 }
             }
@@ -65,8 +65,7 @@ struct PersonDetailView: View {
             VStack(spacing: 20) {
                 identity(d.person)
                 about(d)
-                summary(d.conversation)
-                followUp(d.conversation)
+                encounters(d)
                 interests(d.person)
                 timeline(d.timeline)
             }
@@ -111,34 +110,70 @@ struct PersonDetailView: View {
         }
     }
 
-    private func summary(_ c: ConversationInfo?) -> some View {
-        Card {
-            SectionHeader(title: "Summary")
-            if let text = c?.summary?.nilIfBlank {
-                Text(text).font(theme.body).foregroundStyle(theme.ink)
-            } else if let c, c.isOngoing {
-                Text("You're talking now. Your summary appears here after you part ways.")
-                    .font(theme.body).foregroundStyle(theme.inkSecondary)
-            } else if c != nil {
-                HStack(spacing: 10) {
-                    ProgressView()
-                    Text("Writing your summary").font(theme.body).foregroundStyle(theme.inkSecondary)
-                }
-            } else {
+    /// Every time we were together, newest first, each with its own summary
+    /// and follow up. Coming back within 5 minutes is the same encounter.
+    @ViewBuilder
+    private func encounters(_ d: PersonDetail) -> some View {
+        let list = Self.encounterList(d)
+        if list.isEmpty {
+            Card {
+                SectionHeader(title: "Summary")
                 Text("Your summary appears here after you talk.")
                     .font(theme.body).foregroundStyle(theme.inkSecondary)
             }
-            if let topics = c?.topics, !topics.isEmpty {
-                FlowLayout(spacing: 6) {
-                    ForEach(topics, id: \.self) { TagChip(text: $0, systemImage: nil, size: 13) }
-                }
+        } else {
+            ForEach(Array(list.enumerated()), id: \.element.id) { index, e in
+                encounter(e, title: list.count > 1 ? "Encounter \(list.count - index)" : "Summary")
             }
         }
     }
 
+    /// Older servers send only the latest conversation.
+    private static func encounterList(_ d: PersonDetail) -> [Encounter] {
+        if let list = d.encounters { return list }
+        guard let c = d.conversation else { return [] }
+        let end = c.endedAt ?? Date().timeIntervalSince1970 * 1000
+        return [Encounter(id: "latest", startedAt: c.startedAt, endedAt: c.endedAt, durationMs: max(0, end - c.startedAt),
+                          matched: true, summary: c.summary, topics: c.topics, followUp: c.followUp)]
+    }
+
+    private func encounter(_ e: Encounter, title: String) -> some View {
+        VStack(spacing: 12) {
+            Card {
+                SectionHeader(title: title)
+                Text(whenLine(e)).font(theme.caption).foregroundStyle(theme.inkSecondary)
+                if let text = e.summary?.nilIfBlank {
+                    Text(text).font(theme.body).foregroundStyle(theme.ink)
+                } else if e.isOngoing {
+                    Text("You're together now. Your summary appears here after you part ways.")
+                        .font(theme.body).foregroundStyle(theme.inkSecondary)
+                } else {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("Writing your summary").font(theme.body).foregroundStyle(theme.inkSecondary)
+                    }
+                }
+                if !e.topics.isEmpty {
+                    FlowLayout(spacing: 6) {
+                        ForEach(e.topics, id: \.self) { TagChip(text: $0, systemImage: nil, size: 13) }
+                    }
+                }
+            }
+            followUp(e.followUp)
+        }
+    }
+
+    /// "Today at 3:42 PM, 6 min together".
+    private func whenLine(_ e: Encounter) -> String {
+        let when = e.startedDate.formatted(date: .abbreviated, time: .shortened)
+        if e.isOngoing { return "\(when), together now" }
+        let length = e.minutes < 1 ? "under a minute" : "\(e.minutes) min"
+        return "\(when), \(length) together"
+    }
+
     @ViewBuilder
-    private func followUp(_ c: ConversationInfo?) -> some View {
-        if let followUp = c?.followUp?.nilIfBlank {
+    private func followUp(_ text: String?) -> some View {
+        if let followUp = text?.nilIfBlank {
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader(title: "Suggested follow up")
                 Text(followUp).font(theme.body).foregroundStyle(theme.ink)

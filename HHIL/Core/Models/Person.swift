@@ -58,6 +58,25 @@ struct ConversationInfo: Decodable {
     var isOngoing: Bool { endedAt == nil }
 }
 
+/// One time together with someone. Coming back within 5 minutes continues the
+/// same encounter; later is a new one with its own summary.
+struct Encounter: Decodable, Identifiable {
+    let id: String
+    var startedAt: Double
+    var endedAt: Double?
+    /// Time actually spent together (milliseconds).
+    var durationMs: Double
+    /// We were a match (false: we just stood together).
+    var matched: Bool
+    var summary: String?
+    var topics: [String]
+    var followUp: String?
+
+    var startedDate: Date { Date(timeIntervalSince1970: startedAt / 1000) }
+    var isOngoing: Bool { endedAt == nil }
+    var minutes: Int { Int((durationMs / 60_000).rounded()) }
+}
+
 struct TimelineItem: Decodable, Identifiable {
     var kind: String
     var text: String
@@ -72,6 +91,8 @@ struct PersonDetail: Decodable {
     var person: PersonProfile
     var connectedAt: Double?
     var conversation: ConversationInfo?
+    /// Every encounter, newest first (nil from older servers: use `conversation`).
+    var encounters: [Encounter]? = nil
     var timeline: [TimelineItem]
     /// False when we met but I haven't saved their contact yet.
     var saved: Bool? = nil
@@ -82,6 +103,8 @@ struct Peer: Decodable, Identifiable {
     let userId: String
     var name: String
     var tokenForMe: String?
+    /// A match (ranged first). The server sends peers most important first.
+    var isMatch: Bool? = nil
 
     var id: String { userId }
 }
