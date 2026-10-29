@@ -100,6 +100,18 @@ struct Theme {
     var pairWashSpeed: Double = 0.35
     /// How much of the match color the white identity card takes on at talking distance.
     var matchCardTint: Double = 0.22
+    /// Edge glows (two or more matches in the area at once): one person per
+    /// side, in their color. Width as a share of the badge width, opacity and
+    /// blur, each from faint (far, or only heard over Bluetooth) to strong (1 m).
+    var edgeGlowWidth: ClosedRange<Double> = 0.08...0.26
+    var edgeGlowOpacity: ClosedRange<Double> = 0.3...0.9
+    var edgeGlowBlur: ClosedRange<Double> = 16...34
+    /// A glow arriving or leaving slides in from its edge with this spring.
+    var edgeGlowSpring = Animation.spring(response: 0.5, dampingFraction: 0.7)
+    /// The small pill on the badge that says it is a demo, or that "together" is estimated.
+    var demoPillFill = Color(hex: "#FF6C6E")
+    var notePillFill = Color(hex: "#2C2C2C").opacity(0.78)
+    var pillText = Color.white
     /// The live microphone meter in the recording pill on the badge screen.
     var recordingDot = Color(hex: "#FF3B30")
 

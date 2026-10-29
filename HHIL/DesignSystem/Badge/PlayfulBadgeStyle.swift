@@ -31,6 +31,7 @@ private struct PlayfulBadge: View {
                 FlowingBackground()
                 PairWash(colors: c.pairColors, strength: c.tintStrength)
                 MatchGlow(color: c.matchColor, intensity: c.tintStrength)
+                EdgeGlows(glows: c.edgeGlows)
 
                 if horizontal {
                     HStack(spacing: 14 * scale) {
@@ -47,8 +48,25 @@ private struct PlayfulBadge: View {
                     }
                     .padding(pad)
                 }
+
+                if let note = note {
+                    // Below the Dynamic Island when worn upright
+                    BadgeNotePill(text: note, demo: c.isDemo, scale: scale)
+                        .padding(.top, pad + (worn && !horizontal ? 46 * scale : 6 * scale))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .transition(.scale(scale: 0.6).combined(with: .opacity))
+                }
             }
+            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: note)
         }
+    }
+
+    /// Says plainly when the people on the badge are pretend, or when
+    /// "together" is only a Bluetooth estimate.
+    private var note: String? {
+        if c.isDemo { return "Demo · pretend people" }
+        if c.estimated { return "Close by · estimated" }
+        return nil
     }
 
     private func keywords(scale: CGFloat, size: CGFloat, shape: AnyShape) -> some View {
@@ -131,5 +149,71 @@ private struct MatchGlow: View {
             .allowsHitTesting(false)
             .animation(.easeOut(duration: theme.matchTintResponse), value: intensity)
             .ignoresSafeArea()
+    }
+}
+
+/// Two or more matches in the area at once: a soft glow on each side edge,
+/// one person per side in their own color, stronger as they come closer, so
+/// the wearer and the people around can tell two of them may show up here.
+private struct EdgeGlows: View {
+    var glows: [EdgeGlow]
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                ForEach(glows) { glow in
+                    EdgeGlowBand(glow: glow, badgeWidth: geo.size.width)
+                        .transition(.move(edge: glow.side == .leading ? .leading : .trailing).combined(with: .opacity))
+                }
+            }
+            .animation(theme.edgeGlowSpring, value: glows.map(\.id))
+        }
+        .allowsHitTesting(false)
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
+    }
+}
+
+private struct EdgeGlowBand: View {
+    var glow: EdgeGlow
+    var badgeWidth: CGFloat
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        let i = max(0, min(1, glow.intensity))
+        let leading = glow.side == .leading
+        let width = badgeWidth * (theme.edgeGlowWidth.lowerBound + (theme.edgeGlowWidth.upperBound - theme.edgeGlowWidth.lowerBound) * i)
+        let opacity = theme.edgeGlowOpacity.lowerBound + (theme.edgeGlowOpacity.upperBound - theme.edgeGlowOpacity.lowerBound) * i
+        let blur = theme.edgeGlowBlur.lowerBound + (theme.edgeGlowBlur.upperBound - theme.edgeGlowBlur.lowerBound) * i
+        let color = Color(hex: glow.colorHex)
+        LinearGradient(
+            colors: [color.opacity(opacity), color.opacity(opacity * 0.4), color.opacity(0)],
+            startPoint: leading ? .leading : .trailing,
+            endPoint: leading ? .trailing : .leading
+        )
+        .frame(width: max(1, width))
+        .blur(radius: blur)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: leading ? .leading : .trailing)
+        .animation(.easeOut(duration: theme.matchTintResponse), value: i)
+    }
+}
+
+/// A small pill at the top of the badge ("Demo · pretend people").
+private struct BadgeNotePill: View {
+    var text: String
+    var demo: Bool
+    var scale: CGFloat
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        Text(text)
+            .font(.brand(max(11, 15 * scale), .semibold))
+            .foregroundStyle(theme.pillText)
+            .padding(.horizontal, 14 * scale)
+            .padding(.vertical, 7 * scale)
+            .background(Capsule().fill(demo ? theme.demoPillFill : theme.notePillFill))
+            .shadow(color: theme.shadowColor, radius: theme.shadowRadius, y: theme.shadowY)
+            .accessibilityAddTraits(.isStaticText)
     }
 }

@@ -31,6 +31,25 @@ final class BadgeStore {
     /// server's. 0 at the pair's respond range, 1 at talking distance.
     private(set) var closeness: Double = 0
 
+    /// Matches in the area when two or more are around at once: up to two,
+    /// one glow per side edge, each person keeping their side.
+    private(set) var edgeGlows: [EdgeGlow] = []
+    /// We came together on Bluetooth alone (UWB had nothing for a while).
+    private(set) var togetherEstimated = false
+    /// The badge says its "together" is an estimate (the server's or ours).
+    var showsEstimated: Bool {
+        (state.mode == .talking && state.estimated == true) || (togetherWith != nil && togetherEstimated)
+    }
+
+    /// Settings > Demo: people approaching. Pretend people walk up and meet
+    /// you, on this phone only: no server writes, no recording.
+    var demoMode = false {
+        didSet {
+            guard demoMode != oldValue else { return }
+            if demoMode { startDemo() } else { stopDemo() }
+        }
+    }
+
     /// Goes up by one at each "we finally met" moment (the avatars jump to each other).
     private(set) var meetCount = 0
     /// The person we met and are still standing with (nil once we part).
@@ -64,6 +83,15 @@ final class BadgeStore {
     private var localReading: (peerId: String, meters: Double, maxRange: Double, at: Date)?
     /// Conversations this person already answered the recording question for.
     private var consentAnswered: Set<String> = []
+    /// Everyone nearby from every source (NearbyService, about twice a second).
+    private var presence: [String: PeerPresence] = [:]
+    /// Which side edge each person glows on (stable while they are around).
+    private var edgeSides: [String: EdgeGlow.Side] = [:]
+    /// The server reading last used in place of our own UWB, per peer.
+    private var lastServerIngest: [String: Date] = [:]
+    /// The latest real badge state while the demo runs (shown again after).
+    private var realState: BadgeState = .idle
+    private var demoTask: Task<Void, Never>?
 
     // Distance rules: the same numbers as spacetime/src/lib/constants.ts in
     // the parent repo (the server's talking state uses them too).
@@ -91,9 +119,10 @@ final class BadgeStore {
         return max(0, min(1, (range - meters) / span))
     }
     /// UWB readings jump around: this many readings in a row, over at least
-    /// this long, confirm we came together (or parted). About half a second.
-    static let confirmReadings = 3
-    static let confirmTime: TimeInterval = 0.4
+    /// this long, confirm we came together (or parted). About a quarter second.
+    /// (NearbyService already takes a median of three, so two are enough here.)
+    static let confirmReadings = 2
+    static let confirmTime: TimeInterval = 0.25
     /// Taking the badge off stops the recording after this long (an accidental
     /// swipe out and straight back in keeps it going).
     static let takeOffGrace: Duration = .seconds(2)
@@ -122,6 +151,8 @@ final class BadgeStore {
 
     /// Sign out: stop listening, and close any conversation in progress.
     func stop() {
+        realState = .idle
+        demoMode = false
         task?.cancel()
         userId = nil
         state = .idle
@@ -132,6 +163,8 @@ final class BadgeStore {
         closeness = 0
         metPeerId = nil
         togetherWith = nil
+        presence = [:]
+        edgeGlows = []
         leaveTask?.cancel()
         leaveTask = nil
         if let id = activeConversationId {
@@ -179,6 +212,82 @@ final class BadgeStore {
     /// This phone's smoothed UWB distance to a peer (NearbyService, a few times
     /// a second), and how far this phone can sense that peer (9 or 50 m).
     func nearbyDistance(peerId: String, meters: Double, maxRange: Double) {
+        guard !demoMode else { return }
+        ingest(peerId: peerId, meters: meters, maxRange: maxRange, estimated: false)
+    }
+
+    /// Everyone nearby from every source (NearbyService, about twice a second).
+    func updatePresence(_ list: [PeerPresence]) {
+        guard !demoMode else { return }
+        process(list, now: Date())
+    }
+
+    private func process(_ list: [PeerPresence], now: Date) {
+        presence = Dictionary(list.map { ($0.peerId, $0) }, uniquingKeysWith: { a, _ in a })
+        // Our own UWB has nothing for the person the badge shows (they're
+        // beside us, out of view, or have no slot): the other phone's reading
+        // from the server counts the same, so one side seeing the other is
+        // enough for the tint and for "together" (a Bluetooth only "together"
+        // comes from the server's strict rule and is marked estimated).
+        if let peerId = state.peerId, let p = presence[peerId], p.uwbMeters == nil,
+           let meters = p.serverMeters, let at = p.serverAt, now.timeIntervalSince(at) < 2,
+           at > (lastServerIngest[peerId] ?? .distantPast).addingTimeInterval(0.05) {
+            let ownStale = localReading.map { $0.peerId != peerId || now.timeIntervalSince($0.at) > 1.2 } ?? true
+            if ownStale {
+                lastServerIngest[peerId] = at
+                ingest(peerId: peerId, meters: meters, maxRange: state.respondRangeM ?? Self.standardRange,
+                       estimated: p.serverSource == "ble")
+            }
+        }
+        updateEdges(now: now)
+    }
+
+    /// Two or more matches in the area: the two strongest glow on the side
+    /// edges, one person per side. A person keeps their side while around
+    /// (first by where UWB says they are, else by their id).
+    private func updateEdges(now: Date) {
+        let range = max(Self.minRespondFrom, state.respondRangeM ?? Self.standardRange)
+        var items: [(p: PeerPresence, intensity: Double)] = []
+        for p in presence.values where p.isMatch {
+            let far: (meters: Double, coarse: Bool)? = p.inArea ? (range * 1.5, true) : nil
+            guard let d = p.distance(now: now) ?? far else { continue }
+            let c = Self.closeness(meters: d.meters, range: range)
+            let intensity = d.coarse ? min(0.55, 0.18 + 0.6 * c) : 0.18 + 0.82 * c
+            items.append((p, intensity))
+        }
+        guard items.count >= 2 else {
+            if !edgeGlows.isEmpty { edgeGlows = [] }
+            return
+        }
+        // The two strongest; whoever already has a side keeps it
+        let top = items.sorted { $0.intensity > $1.intensity }.prefix(2)
+            .sorted { (edgeSides[$0.p.peerId] != nil ? 0 : 1) < (edgeSides[$1.p.peerId] != nil ? 0 : 1) }
+        var used: Set<EdgeGlow.Side> = []
+        var colors: Set<String> = []
+        var out: [EdgeGlow] = []
+        for item in top {
+            let id = item.p.peerId
+            var side = edgeSides[id] ?? { () -> EdgeGlow.Side in
+                if let x = item.p.direction, abs(x) > 0.15 { return x < 0 ? .leading : .trailing }
+                return AvatarStyle.seed(id) % 2 == 0 ? .leading : .trailing
+            }()
+            if used.contains(side) { side = side.opposite }
+            edgeSides[id] = side
+            used.insert(side)
+            var hex = item.p.avatarColor ?? item.p.color ?? "#FFD55D"
+            if colors.contains(hex.uppercased()), let pair = item.p.color { hex = pair }
+            colors.insert(hex.uppercased())
+            out.append(EdgeGlow(id: id, side: side, colorHex: hex, intensity: (item.intensity * 50).rounded() / 50))
+        }
+        out.sort { $0.side == .leading && $1.side == .trailing }
+        if edgeSides.count > 64 {
+            edgeSides = edgeSides.filter { presence[$0.key] != nil }
+        }
+        if out != edgeGlows { edgeGlows = out }
+    }
+
+    /// One distance reading for a peer (ours, the server's merged one, or the demo's).
+    private func ingest(peerId: String, meters: Double, maxRange: Double, estimated: Bool) {
         let now = Date()
         if peerId == state.peerId {
             localReading = (peerId, meters, maxRange, now)
@@ -200,10 +309,17 @@ final class BadgeStore {
 
         if peerId == togetherWith, near == false, confirmed {
             togetherWith = nil
+            togetherEstimated = false
             cues.together = false
         }
-        if peerId == togetherWith { lastTogether = now }
-        guard isWorn, peerId == state.peerId, state.mode != .idle, near == true, confirmed else { return }
+        if peerId == togetherWith {
+            lastTogether = now
+            // A real UWB reading inside talking distance: no longer an estimate
+            if near == true, !estimated { togetherEstimated = false }
+        }
+        guard isWorn || (demoMode && isPreviewVisible), peerId == state.peerId, state.mode != .idle,
+              near == true, confirmed else { return }
+        if togetherWith != peerId { togetherEstimated = estimated }
         meet(peerId)
     }
 
@@ -242,7 +358,7 @@ final class BadgeStore {
             self.cues.met()
         }
         // A match joins my People now; anyone else once the encounter is kept.
-        if let userId, state.isMatch {
+        if let userId, state.isMatch, !demoMode {
             Task { [backend] in
                 do {
                     try await backend.markMet(userId: userId, otherId: peerId)
@@ -255,7 +371,12 @@ final class BadgeStore {
 
     // MARK: State changes
 
-    private func apply(_ new: BadgeState) async {
+    private func apply(_ new: BadgeState, demo: Bool = false) async {
+        // The demo owns the badge while it runs; the real state waits.
+        if demoMode, !demo {
+            realState = new
+            return
+        }
         state = new
         cues.update(new)
         if localReading?.peerId != new.peerId { localReading = nil }
@@ -267,7 +388,12 @@ final class BadgeStore {
             cues.together = false
         }
         // Talking means we're together, even if this phone has no reading of its own.
-        if new.mode == .talking, isWorn, let peerId = new.peerId { meet(peerId) }
+        if new.mode == .talking, isWorn || (demo && isPreviewVisible), let peerId = new.peerId {
+            if togetherWith != peerId { togetherEstimated = new.estimated == true }
+            meet(peerId)
+        }
+        // The demo never records or tells the server anything.
+        guard !demo else { return }
 
         // Only a badge that is worn records (taking it off stops the recording).
         if new.mode == .talking, isWorn, let id = new.conversationId {
@@ -371,6 +497,128 @@ final class BadgeStore {
                 try? await Task.sleep(for: .milliseconds(50))
             }
             self.micLevel = 0
+        }
+    }
+
+    // MARK: Demo: people approaching (Settings)
+
+    /// A pretend person for the demo.
+    private struct DemoPeer {
+        let id: String
+        let name: String
+        let shape: String
+        let color: String
+        let pairColor: String
+        let tag: String
+        let keywords: [String]
+    }
+
+    /// The demo's timeline, seconds: Maya walks up from 9 m to 0.8 m over 20 s
+    /// while Leo comes within 3.5 m and waits (both edges glow), Maya and you
+    /// meet and stay together for 10 s, then both walk away. Then again.
+    private static let demoRound: TimeInterval = 42
+
+    private static func demoMayaMeters(_ t: TimeInterval) -> Double? {
+        switch t {
+        case ..<20: return 9 - (9 - 0.8) * (t / 20)
+        case ..<30: return 0.8 + 0.05 * sin(t * 1.3)
+        case ..<38: return 0.8 + (9 - 0.8) * ((t - 30) / 8)
+        default: return nil
+        }
+    }
+
+    private static func demoLeoMeters(_ t: TimeInterval) -> Double? {
+        switch t {
+        case ..<4: return nil
+        case ..<16: return 9 - (9 - 3.5) * ((t - 4) / 12)
+        case ..<30: return 3.5 + 0.3 * sin(t * 0.8)
+        case ..<36: return 3.5 + (9 - 3.5) * ((t - 30) / 6)
+        default: return nil
+        }
+    }
+
+    private func startDemo() {
+        realState = state
+        resetMeetingForDemo()
+        demoTask?.cancel()
+        demoTask = Task { await self.runDemo() }
+    }
+
+    private func stopDemo() {
+        demoTask?.cancel()
+        demoTask = nil
+        resetMeetingForDemo()
+        presence = [:]
+        edgeGlows = []
+        let real = realState
+        Task { await self.apply(real) }
+    }
+
+    private func resetMeetingForDemo() {
+        localReading = nil
+        streak = nil
+        togetherWith = nil
+        togetherEstimated = false
+        metPeerId = nil
+        lastTogether = .distantPast
+        cues.together = false
+        closeness = 0
+        cues.approach(closeness: 0)
+    }
+
+    private func demoState(_ p: DemoPeer, mode: BadgeMode, meters: Double) -> BadgeState {
+        let c = mode == .talking ? 1 : Self.closeness(meters: meters, range: Self.standardRange)
+        var s = BadgeState(
+            mode: mode, glow: mode == .talking ? 1 : 0.25 + 0.75 * c, color: p.pairColor, frontTag: p.tag,
+            peerId: p.id, peerName: p.name, peerAvatarShape: p.shape, peerAvatarColor: p.color, closeness: c,
+            conversationId: nil, recordConversations: false, californiaMode: false, keywords: p.keywords,
+            matched: true, respondRangeM: Self.standardRange
+        )
+        s.meters = meters
+        s.distanceSource = "uwb"
+        return s
+    }
+
+    private func demoPresence(_ p: DemoPeer, meters: Double, direction: Double) -> PeerPresence {
+        PeerPresence(peerId: p.id, name: p.name, isMatch: true, color: p.pairColor, avatarColor: p.color,
+                     uwbMeters: meters, serverMeters: nil, serverSource: nil, serverAt: nil,
+                     bleRSSI: nil, inArea: true, direction: direction)
+    }
+
+    /// Ten times a second: move the pretend people, and feed their distances
+    /// through the same path real UWB readings take (tint, heartbeat, meet).
+    private func runDemo() async {
+        var round = 0
+        while !Task.isCancelled, demoMode {
+            round += 1
+            // A new id each round, so the meet moment plays every time.
+            let maya = DemoPeer(id: "demo-maya-\(round)", name: "Maya", shape: "blob", color: "#3BB52D",
+                                pairColor: "#87D9FB", tag: "Product designer",
+                                keywords: ["Agent design", "iOS engineers", "Film photos"])
+            let leo = DemoPeer(id: "demo-leo-\(round)", name: "Leo", shape: "flower", color: "#EB8FFF",
+                               pairColor: "#FFD60A", tag: "Robotics", keywords: ["Robot arms", "Hackathons"])
+            let start = Date()
+            var together: Date?
+            while !Task.isCancelled, demoMode {
+                let now = Date()
+                let t = now.timeIntervalSince(start)
+                if t > Self.demoRound { break }
+                let mayaM = Self.demoMayaMeters(t)
+                let leoM = Self.demoLeoMeters(t)
+                if let m = mayaM {
+                    if togetherWith == maya.id { together = together ?? now } else { together = nil }
+                    let talking = t < 30 && together.map { now.timeIntervalSince($0) >= 1 } == true
+                    await apply(demoState(maya, mode: talking ? .talking : .match, meters: m), demo: true)
+                    ingest(peerId: maya.id, meters: m, maxRange: Self.standardRange, estimated: false)
+                } else if state.mode != .idle {
+                    await apply(.idle, demo: true)
+                }
+                var list: [PeerPresence] = []
+                if let m = mayaM { list.append(demoPresence(maya, meters: m, direction: -0.4)) }
+                if let m = leoM { list.append(demoPresence(leo, meters: m, direction: 0.5)) }
+                process(list, now: now)
+                try? await Task.sleep(for: .milliseconds(100))
+            }
         }
     }
 

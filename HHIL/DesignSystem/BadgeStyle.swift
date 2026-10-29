@@ -46,6 +46,13 @@ struct BadgeConfiguration {
     var together = false
     /// Goes up at each "we finally met" moment: the avatars leap to each other.
     var meetCount = 0
+    /// Two or more matches in the area: up to two glow on the side edges, one
+    /// color per person, stronger as they get closer.
+    var edgeGlows: [EdgeGlow] = []
+    /// Pretend people (Settings > Demo): the badge says it is a demo.
+    var isDemo = false
+    /// "Together" comes from Bluetooth alone: the badge says it is an estimate.
+    var estimated = false
     /// Where my avatar should look (-1...1) when UWB knows the match's direction.
     var look: CGPoint?
     /// With nobody near, the eyes follow the phone's tilt (read inside the avatar

@@ -32,6 +32,7 @@ final class AppEnvironment {
             let range = nearbyService?.maxRange(for: peerId) ?? BadgeStore.standardRange
             badgeStore?.nearbyDistance(peerId: peerId, meters: meters, maxRange: range)
         }
+        nearby.onPresence = { [weak badgeStore] list in badgeStore?.updatePresence(list) }
     }
 
     /// SpacetimeDB. UI tests pass `-uiTestDemo` (mock, signed in as the demo

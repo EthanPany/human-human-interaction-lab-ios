@@ -62,6 +62,7 @@ struct SettingsView: View {
 
             NearbySection()
             LocationSection()
+            DemoSection()
 
             Section {
                 Button("Sign out", role: .destructive) { env.session.signOut() }
@@ -102,6 +103,7 @@ private struct NearbySection: View {
         let nearby = env.nearby
         Section {
             LabeledContent("Status", value: nearby.status.label)
+            LabeledContent("Bluetooth", value: nearby.bluetoothLabel)
             if nearby.extendedRange {
                 Toggle("Extended range", isOn: $extended)
                     .onChange(of: extended) { _, _ in nearby.reset() }
@@ -137,7 +139,7 @@ private struct NearbySection: View {
         } header: {
             Text("Nearby (UWB)")
         } footer: {
-            Text("Respond from sets where your badge starts reacting to a match (glow, tint and the heartbeat), up to the most UWB can sense: about 9 m, or 50 m with extended range. With two badges, the smaller setting counts for both. You are together within 1 m (apart again past 1.5 m); anyone together with you for a moment starts an encounter, match or not, but only matches get the tint. Ranging runs only while the badge is worn full screen; taking it off or leaving the app stops it on both phones at once. Extended range works only when both phones are iPhone 15 or later.")
+            Text("Bluetooth helps UWB in a crowd: it tells the badge who is in the area (so ranging starts sooner and goes to the right people), and the other phone's reading counts when this one has none. Bluetooth alone never decides you are together unless UWB has nothing for a few seconds and you are right next to each other; the badge then says it is estimated. Respond from sets where your badge starts reacting to a match (glow, tint and the heartbeat), up to the most UWB can sense: about 9 m, or 50 m with extended range. With two badges, the smaller setting counts for both. You are together within 1 m (apart again past 1.5 m); anyone together with you for a moment starts an encounter, match or not, but only matches get the tint. Ranging runs only while the badge is worn full screen; taking it off or leaving the app stops it on both phones at once. Extended range works only when both phones are iPhone 15 or later.")
         }
     }
 
@@ -174,11 +176,38 @@ private struct NearbySection: View {
     private func detail(_ p: NearbyService.PeerDiagnostics) -> String {
         var parts: [String] = []
         parts.append(p.tokenSent ? "token sent" : "no token sent")
-        parts.append(p.running ? "ranging" : "waiting for their token")
+        parts.append(p.running ? "ranging" : p.prepared ? "token ready, waiting for a slot" : "waiting for their token")
         parts.append(p.isMatch ? "match" : "not a match")
         if p.extended { parts.append("extended") }
         if let at = p.updatedAt { parts.append("updated \(Int(Date().timeIntervalSince(at)))s ago") }
+        if let m = p.serverMeters {
+            let source = p.serverSource == "ble" ? "Bluetooth" : "UWB"
+            parts.append(String(format: "server %.2f m", m) + " (\(source))")
+        }
+        if let rssi = p.bleRSSI { parts.append(String(format: "Bluetooth %.0f dBm", rssi)) }
+        if p.reruns > 0 { parts.append("woken \(p.reruns)x") }
         if let e = p.lastError { parts.append(e) }
         return parts.joined(separator: " · ")
+    }
+}
+
+/// Settings > Demo: pretend people walk up to you, for showing the app.
+private struct DemoSection: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        Section {
+            Toggle("Demo: people approaching", isOn: Binding(
+                get: { env.badge.demoMode },
+                set: { on in
+                    Feedback.shared.play(.toggle(on: on))
+                    env.badge.demoMode = on
+                }
+            ))
+        } header: {
+            Text("Demo")
+        } footer: {
+            Text("Two pretend matches walk up to you: Maya from 9 m until you meet, Leo stops a few meters away, so both edges of the badge glow. Then they walk off and it starts again. Only on this phone: nothing is sent to the server and nothing is recorded. The badge says Demo while it runs. Wear the badge to show it.")
+        }
     }
 }
