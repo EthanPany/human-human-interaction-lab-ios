@@ -3,60 +3,206 @@ import SwiftUI
 /// Rounded surface for profile blocks and detail sections.
 struct Card<Content: View>: View {
     var fill: Color?
+    var padding: CGFloat = 18
     @ViewBuilder var content: Content
     @Environment(\.theme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) { content }
+        VStack(alignment: .leading, spacing: 12) { content }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
+            .padding(padding)
             .background(fill ?? theme.surface, in: RoundedRectangle(cornerRadius: theme.cornerRadius))
     }
 }
 
-/// Small uppercase label above a block.
+/// Block title, with an optional trailing control (edit pencil, plus).
+struct SectionHeader<Trailing: View>: View {
+    var title: String
+    @ViewBuilder var trailing: Trailing
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        HStack {
+            Text(title).font(theme.sectionTitle).foregroundStyle(theme.strongInk)
+            Spacer()
+            trailing
+        }
+    }
+}
+
+extension SectionHeader where Trailing == EmptyView {
+    init(title: String) { self.init(title: title) { EmptyView() } }
+}
+
+/// A section or card title without a trailing control (same style as SectionHeader).
 struct SectionLabel: View {
     var text: String
     @Environment(\.theme) private var theme
 
     var body: some View {
-        Text(text.uppercased())
-            .font(theme.caption)
-            .foregroundStyle(theme.inkSecondary)
+        Text(text)
+            .font(theme.sectionTitle)
+            .foregroundStyle(theme.strongInk)
     }
 }
 
-/// A tag pill.
+/// Small label above a value ("Looking for").
+struct FieldLabel: View {
+    var text: String
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        Text(text).font(theme.fieldLabel).foregroundStyle(theme.inkSecondary)
+    }
+}
+
+/// A filled shape with the theme's tight drop shadow, for button backgrounds.
+/// Put it in `.background` so the shadow stays off the label.
+struct RaisedFill<S: Shape>: View {
+    var shape: S
+    var fill: Color
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        shape.fill(fill)
+            .shadow(color: theme.shadowColor, radius: theme.shadowRadius, y: theme.shadowY)
+    }
+}
+
+/// Cream pill with a small icon, the designer's "Name Tag".
 struct TagChip: View {
     var text: String
-    var size: CGFloat = 15
-    var fill: Color = .white.opacity(0.85)
+    var systemImage: String? = "sparkle"
+    var size: CGFloat = 16
+    var fill: Color?
+    var highlighted = false
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.system(size: size * 0.75, weight: .semibold))
+                    .foregroundStyle(theme.red)
+            }
+            Text(text)
+                .font(.brand(size, highlighted ? .semibold : .regular))
+                .foregroundStyle(theme.strongInk)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, size * 0.85)
+        .padding(.vertical, size * 0.55)
+        .background(fill ?? theme.surfaceMuted, in: Capsule())
+        .overlay(Capsule().strokeBorder(theme.ink.opacity(highlighted ? 0.9 : 0), lineWidth: 2))
+    }
+}
+
+/// The designer's square cream icon button with a soft drop shadow.
+struct IconButton: View {
+    var systemImage: String
+    var label: String
+    var action: () -> Void
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(theme.strongInk)
+                .frame(width: 34, height: 34)
+                .background(RaisedFill(shape: RoundedRectangle(cornerRadius: 8), fill: theme.surfaceMuted))
+        }
+        .buttonStyle(PressScaleStyle())
+        .accessibilityLabel(label)
+    }
+}
+
+/// Wraps an arbitrary label in the icon button look (for Menu and PhotosPicker).
+struct IconButtonLabel: View {
+    var systemImage: String
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 15, weight: .bold))
+            .foregroundStyle(theme.strongInk)
+            .frame(width: 34, height: 34)
+            .background(RaisedFill(shape: RoundedRectangle(cornerRadius: 8), fill: theme.surfaceMuted))
+    }
+}
+
+/// Main call to action: yellow pill, dark text, same drop shadow.
+struct PrimaryButtonStyle: ButtonStyle {
+    @Environment(\.theme) private var theme
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.brand(17, .semibold))
+            .foregroundStyle(theme.strongInk)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            // Shadow on the shape only, close under it (not on the label text)
+            .background(RaisedFill(shape: RoundedRectangle(cornerRadius: 14), fill: theme.yellowStrong))
+            .opacity(isEnabled ? 1 : 0.5)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.pressSpring, value: configuration.isPressed)
+            .pressFeedback(configuration.isPressed)
+    }
+}
+
+/// Secondary action: cream pill.
+struct SecondaryButtonStyle: ButtonStyle {
+    @Environment(\.theme) private var theme
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.brand(15, .semibold))
+            .foregroundStyle(theme.strongInk)
+            .padding(.horizontal, 14).padding(.vertical, 9)
+            .background(RaisedFill(shape: RoundedRectangle(cornerRadius: 10), fill: theme.surfaceMuted))
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(.pressSpring, value: configuration.isPressed)
+            .pressFeedback(configuration.isPressed)
+    }
+}
+
+struct PressScaleStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .animation(.pressSpring, value: configuration.isPressed)
+            .pressFeedback(configuration.isPressed)
+    }
+}
+
+extension Animation {
+    /// Quick in, with a small bounce on the way back out.
+    static let pressSpring = Animation.spring(response: 0.22, dampingFraction: 0.6)
+}
+
+@MainActor
+private extension View {
+    /// Soft press sound and light tap the moment a button goes down.
+    func pressFeedback(_ isPressed: Bool) -> some View {
+        onChange(of: isPressed) { _, pressed in
+            if pressed { Feedback.shared.play(.buttonPress) }
+        }
+    }
+}
+
+/// The red location pill under the name.
+struct LocationPill: View {
+    var text: String
+    var size: CGFloat = 12
     @Environment(\.theme) private var theme
 
     var body: some View {
         Text(text)
-            .font(.system(size: size, weight: .semibold))
-            .foregroundStyle(theme.ink)
-            .padding(.horizontal, 14).padding(.vertical, 8)
-            .background(fill, in: Capsule())
-    }
-}
-
-/// Dashed box marking where the designers' element (puzzle piece, blob) goes.
-struct DesignElementPlaceholder: View {
-    var label: String
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: 28)
-            .strokeBorder(theme.placeholderStroke, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
-            .overlay(
-                Text(label)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(theme.inkSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(8)
-            )
+            .font(.brand(size, .medium))
+            .foregroundStyle(.white)
+            .padding(.horizontal, size * 1.4)
+            .padding(.vertical, size * 0.8)
+            .background(theme.red, in: Capsule())
     }
 }
 
@@ -90,5 +236,47 @@ struct FlowLayout: Layout {
             x += size.width + spacing
             rowHeight = max(rowHeight, size.height)
         }
+    }
+}
+
+/// A text field with its title outside, above the box, and a hint inside.
+/// Input text and hint use the theme's dark inks, so they stay readable
+/// whatever the system appearance is. Keyboard and autofill settings are set
+/// by the caller with the usual modifiers (keyboardType, textContentType, ...).
+struct LabeledField: View {
+    var title: String
+    var hint: String
+    @Binding var text: String
+    var secure = false
+    var footnote: String?
+
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.brand(14, .semibold))
+                .foregroundStyle(theme.strongInk)
+            Group {
+                if secure {
+                    SecureField(title, text: $text, prompt: prompt)
+                } else {
+                    TextField(title, text: $text, prompt: prompt)
+                }
+            }
+            .font(theme.body)
+            .foregroundStyle(theme.strongInk)
+            // UI tests find fields by their title (the label can be the prompt)
+            .accessibilityIdentifier(title)
+            .padding(14)
+            .background(theme.surfaceMuted, in: RoundedRectangle(cornerRadius: 14))
+            if let footnote {
+                Text(footnote).font(theme.caption).foregroundStyle(theme.inkSecondary)
+            }
+        }
+    }
+
+    private var prompt: Text {
+        Text(hint).foregroundStyle(theme.inkSecondary)
     }
 }

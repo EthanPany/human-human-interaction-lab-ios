@@ -6,12 +6,14 @@ Design: [Figma file](https://www.figma.com/design/fT0XfUlJq0W47Z33XfjnYY/Cal-Hac
 
 ## Run it
 
-1. `brew install xcodegen`
-2. `cp Config/Secrets.example.xcconfig Config/Secrets.xcconfig` and fill in `CONVEX_URL` (from `backend/.env.local` after `npx convex dev`), `AGENT_PHONE` (the Photon iMessage number) and `DEVELOPMENT_TEAM`.
+1. `brew install xcodegen`, then `./scripts/fetch-fonts.sh` (General Sans; the license doesn't allow committing the font files)
+2. `cp Config/Secrets.example.xcconfig Config/Secrets.xcconfig` and fill in `AGENT_PHONE` (the Photon iMessage number) and `DEVELOPMENT_TEAM`. The backend is SpacetimeDB on Maincloud (database `hhil`, the `spacetime/` module in the parent repo); its address is fixed in `HHIL/App/AppConfig.swift`.
 3. `xcodegen` creates `HHIL.xcodeproj` (not committed; rerun after adding files).
 4. Open it, pick your iPhone, Run. Do it on two phones to test proximity (Nearby Interaction needs real U1/U2 iPhones, not the simulator).
 
-With no `CONVEX_URL` the app runs on `MockBackend` so the UI can still be clicked through.
+UI tests run on `MockBackend` (`-uiTestDemo`, `-uiTestSignedOut`), which cycles the badge through idle, approaching, talking and saved so every state can be seen on one phone.
+
+CI (`.github/workflows/build.yml`) builds every push on the newest Xcode GitHub has.
 
 ## Layout
 
@@ -19,8 +21,8 @@ With no `CONVEX_URL` the app runs on `MockBackend` so the UI can still be clicke
 HHIL/
   App/            entry point, environment, root + tab view, config
   Core/
-    Models/       Decodable types matching Convex query results
-    Services/     Backend protocol, ConvexBackend, MockBackend
+    Models/       Decodable types matching the SpacetimeDB module's JSON
+    Services/     Backend protocol, SpacetimeBackend (HTTP, function names from spacetime/src/http.ts), MockBackend
     Stores/       @Observable state: session, badge, router
     Nearby/       Nearby Interaction (UWB), one NISession per peer
     Recording/    on device speech transcription of conversations
@@ -29,9 +31,17 @@ HHIL/
   Features/       one folder per screen: Badge, People, Profile, Settings, Onboarding
 ```
 
-## Swapping in the final design
+## Design
 
-Views read every color, font and radius from `Theme`, and the badge is drawn by a `BadgeStyle`. To apply the designers' look, add a new `Theme` value and a new `BadgeStyle` (copy `WireframeBadgeStyle`) and set it in `HHILApp.swift`. No feature code needs to change.
+The look follows the designer's Figma page: cream surfaces, General Sans, the red/yellow/purple/green/blue palette, cream icon buttons with a soft shadow.
+
+- `DesignSystem/Theme.swift`: every color, font and radius. Views never hard code them.
+- `DesignSystem/Background/FlowingBackground.swift`: the designer's blurred colors as a `MeshGradient` that drifts slowly, bleeds colors together and leans with the phone's tilt.
+- `DesignSystem/Avatar/`: the living avatar. Each shape (blob, puzzle, circle, triangle, square, pill, flower) is a polar radius function, so shapes morph into each other and wobble like jelly. Two eyes blink, glance around and follow the match (UWB direction) or the phone's tilt. Expressions (idle, sleepy, curious, excited, happy, love) are parameter sets the engine eases between, the same idea as procedural robot eyes (RoboEyes, Cozmo) and Rive state machines.
+- `AvatarTint`: nobody near, your own color. A match approaching tints you toward the shared color, pale when far, saturated and deeper when close.
+- `DesignSystem/Badge/`: the badge. Huge name, company, a title line that flips to whatever the nearby person cares about, location pill, and the yellow interests block (badge tags and hobbies merged, plus photo moments). Layouts: avatar, photo and text, full photo, each with its own type scale. When two people start talking, their avatar jumps into your frame along an arc and lands beside yours.
+
+To restyle, make a new `Theme` and `BadgeStyle` and set them in `HHILApp.swift`. No feature code changes.
 
 ## iPhone Duo
 

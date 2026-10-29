@@ -1,0 +1,106 @@
+name: Build
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pick the newest Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          xcodebuild -version
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          cp Config/Secrets.example.xcconfig Config/Secrets.xcconfig
+          ./scripts/fetch-fonts.sh || echo "fonts unavailable, building with system font"
+          xcodegen
+      - name: Build for the simulator
+        run: |
+          set -o pipefail
+          xcodebuild -project HHIL.xcodeproj -scheme HHIL \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log | grep -E "error:|warning: .*(deprecated|never)|BUILD" || true
+          grep -q "BUILD SUCCEEDED" build.log
+      - name: Build the Apple Watch app for the watchOS simulator
+        run: |
+          set -o pipefail
+          xcrun simctl list runtimes | grep -i watchos || echo "no watchOS simulator runtime listed"
+          xcodebuild -project HHIL.xcodeproj -scheme HHILWatch \
+            -destination 'generic/platform=watchOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee watch-build.log | grep -E "error:|warning: .*(deprecated|never)|BUILD" || true
+          grep -q "BUILD SUCCEEDED" watch-build.log
+          # The iOS build above embeds the watch app: check it is in the bundle
+          APP=$(find ~/Library/Developer/Xcode/DerivedData -maxdepth 6 -path "*Debug-iphonesimulator/HHIL.app" | head -1)
+          ls "$APP/Watch" && ls "$APP/Watch/HHILWatch.app/PlugIns"
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: "*build.log"
+
+  screenshots:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pick the newest Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          xcodebuild -version
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          cp Config/Secrets.example.xcconfig Config/Secrets.xcconfig
+          ./scripts/fetch-fonts.sh || echo "fonts unavailable, building with system font"
+          xcodegen
+      - name: Pick simulators
+        run: |
+          xcrun simctl list devices available
+          python3 scripts/pick-simulators.py >> "$GITHUB_ENV"
+          cat "$GITHUB_ENV"
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild -project HHIL.xcodeproj -scheme HHIL \
+            -destination "id=$IPHONE_ID" -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO build-for-testing 2>&1 | tee build-for-testing.log | grep -E "error:|BUILD|TEST" || true
+          grep -q "TEST BUILD SUCCEEDED" build-for-testing.log
+      - name: Screenshots on iPhone
+        run: |
+          xcodebuild -project HHIL.xcodeproj -scheme HHIL \
+            -destination "id=$IPHONE_ID" -derivedDataPath DerivedData \
+            -resultBundlePath results/iphone.xcresult \
+            CODE_SIGNING_ALLOWED=NO test-without-building 2>&1 | tee test-iphone.log | grep -E "error|Test Case|passed|failed|TEST" || true
+      - name: Screenshots on iPad
+        run: |
+          xcodebuild -project HHIL.xcodeproj -scheme HHIL \
+            -destination "id=$IPAD_ID" -derivedDataPath DerivedData \
+            -resultBundlePath results/ipad.xcresult \
+            CODE_SIGNING_ALLOWED=NO test-without-building 2>&1 | tee test-ipad.log | grep -E "error|Test Case|passed|failed|TEST" || true
+      - name: Export screenshots
+        run: |
+          python3 scripts/export-screenshots.py results/iphone.xcresult "screens/$IPHONE_NAME"
+          python3 scripts/export-screenshots.py results/ipad.xcresult "screens/$IPAD_NAME"
+          find screens -type f | sort
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screens
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-logs
+          path: "*.log"
+      - name: Fail if a test failed
+        run: |
+          grep -qE "TEST (EXECUTE )?SUCCEEDED" test-iphone.log
+          grep -qE "TEST (EXECUTE )?SUCCEEDED" test-ipad.log

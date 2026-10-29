@@ -11,10 +11,11 @@ struct WornBadgeView: View {
         GeometryReader { geo in
             BadgeView(
                 presentation: .worn,
-                layout: geo.size.width > geo.size.height ? .horizontal : .vertical
+                orientation: geo.size.width > geo.size.height ? .horizontal : .vertical
             )
         }
         .ignoresSafeArea()
+        .recordingIndicator(env.badge.recordingStartedAt)
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
         .contentShape(Rectangle())
@@ -26,17 +27,6 @@ struct WornBadgeView: View {
         .accessibilityAction(named: "Take off badge") { env.badge.takeOff() }
         .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
-        .alert(
-            "Record this conversation?",
-            isPresented: Binding(
-                get: { env.badge.pendingConsentConversationId != nil },
-                set: { if !$0 { env.badge.declineRecording() } }
-            )
-        ) {
-            Button("Not now", role: .cancel) { env.badge.declineRecording() }
-            Button("Record") { env.badge.approveRecording() }
-        } message: {
-            Text("California mode is on. Make sure the other person agrees before you record.")
-        }
+        .recordingConsent()
     }
 }

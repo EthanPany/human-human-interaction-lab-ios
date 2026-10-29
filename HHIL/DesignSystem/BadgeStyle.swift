@@ -4,25 +4,109 @@ import SwiftUI
 /// a BadgeStyle only decides how they look.
 struct BadgeConfiguration {
     enum Presentation { case window, worn }
-    enum Layout { case vertical, horizontal }
+    enum Orientation { case vertical, horizontal }
 
+    // Who
     var name: String
-    /// Badge tags with the front tag (if any) first.
+    var company: String?
+    var role: String?
+    var location: String?
+    var layout: BadgeLayout
+    var photoURL: URL?
+    var avatar: AvatarStyle
+    /// Per person seed so two phones' avatars never blink in sync.
+    var seed: Int
+    var hasProfile: Bool
+
+    /// Badge tags and hobbies in one list, front tag first.
+    var interests: [String]
     var tags: [String]
+    var moments: [Moment]
+
+    /// The big topics under the name: 1 to 3 phrases of 1 to 5 words.
+    /// With a match near, what I have that they want to discuss or what we
+    /// both want to; otherwise my own top tags.
+    var keywords: [String] = []
+
+    // What is happening
     /// The tag the nearby match cares about most. Nil when nobody is close.
     var frontTag: String?
     var mode: BadgeMode
-    /// 0...1, stronger as the match gets closer.
-    var glow: Double
+    /// The peer is a match. Someone who is not still joins the avatars when
+    /// we're together, but the badge shows no tint or glow for them.
+    var matched = true
+    /// 0...1 from distance alone (1 = talking distance).
+    var closeness: Double
     /// Shared match color (same on both badges), nil when idle.
     var matchColor: Color?
-    var presentation: Presentation
-    var layout: Layout
+    var peerAvatar: AvatarStyle?
+    var peerSeed: Int
+    /// We came within talking distance and are still together (before the
+    /// server calls it a conversation, too).
+    var together = false
+    /// Goes up at each "we finally met" moment: the avatars leap to each other.
+    var meetCount = 0
+    /// Everyone with me in a group (two or more others): all join the stage,
+    /// up to `StageMember.shownLimit`, then a "+N" chip. Empty for a pair.
+    var groupMembers: [StageMember] = []
+    /// Two or more matches in the area: up to two glow on the side edges, one
+    /// color per person, stronger as they get closer.
+    var edgeGlows: [EdgeGlow] = []
+    /// Pretend people (Settings > Demo): the badge says it is a demo.
+    var isDemo = false
+    /// "Together" comes from Bluetooth alone: the badge says it is an estimate.
+    var estimated = false
+    /// Where my avatar should look (-1...1) when UWB knows the match's direction.
+    var look: CGPoint?
+    /// With nobody near, the eyes follow the phone's tilt (read inside the avatar
+    /// so tilt updates don't rebuild the whole badge).
+    var followsTilt: Bool
 
-    /// Tags ordered for display: front tag first.
-    static func orderedTags(_ tags: [String], front: String?) -> [String] {
-        guard let front, tags.contains(front) else { return tags }
-        return [front] + tags.filter { $0 != front }
+    var presentation: Presentation
+    var orientation: Orientation
+
+    /// The two avatars share one frame (talking or saved).
+    var hasMet: Bool { (together || mode == .talking || mode == .connected) && (peerAvatar != nil || hasGroup) }
+
+    /// Three or more of us together: the group stage.
+    var hasGroup: Bool { groupMembers.count >= 2 && (together || mode == .talking) }
+
+    /// 0...1 how strongly the match color tints the badge: grows as they get closer.
+    var tintStrength: Double {
+        guard pairColors != nil else { return 0 }
+        return together ? 1 : max(0, min(1, closeness))
+    }
+
+    /// My avatar keeps its own color; proximity tints the badge around it instead.
+    var avatarColor: Color { avatar.color }
+
+    /// The two colors the badge blends as a match gets closer: mine and theirs
+    /// (or the shared match color when we don't know theirs). Nil when idle.
+    var pairColors: (mine: Color, theirs: Color)? {
+        if hasGroup {
+            // Only matched members tint the badge; the others join without it
+            let matchedColors = groupMembers.filter(\.matched).map(\.avatar.color)
+            guard let theirs = Color.blend(matchedColors) else { return nil }
+            return (avatar.color, theirs)
+        }
+        guard mode != .idle, matched, let theirs = peerAvatar?.color ?? matchColor else { return nil }
+        return (avatar.color, theirs)
+    }
+
+    /// The meet ripples: mine and theirs blended; a group blends everyone's colors.
+    var rippleColor: Color {
+        if hasGroup { return Color.blend([avatar.color] + groupMembers.map(\.avatar.color)) ?? avatar.color }
+        return pairColors.map { $0.mine.mix(with: $0.theirs, by: 0.5) } ?? avatarColor
+    }
+
+    var expression: AvatarExpression {
+        AvatarTint.expression(mode: mode, closeness: closeness, hasProfile: hasProfile)
+    }
+
+    /// Items ordered for display: front item first.
+    static func ordered(_ items: [String], front: String?) -> [String] {
+        guard let front, items.contains(front) else { return items }
+        return [front] + items.filter { $0 != front }
     }
 }
 
@@ -31,101 +115,27 @@ protocol BadgeStyle {
     @MainActor func makeBody(_ configuration: BadgeConfiguration) -> AnyView
 }
 
-/// The current wireframe look: solid match color, big name, tags, a placeholder
-/// for the designers' element, and an edge glow for proximity.
-struct WireframeBadgeStyle: BadgeStyle {
-    func makeBody(_ c: BadgeConfiguration) -> AnyView {
-        AnyView(WireframeBadge(c: c))
-    }
+/// Someone with me on the badge in a group.
+struct StageMember: Equatable, Identifiable {
+    /// The stage shows this many others; more become a "+N" chip.
+    static let shownLimit = 4
+
+    let id: String
+    var avatar: AvatarStyle
+    var seed: Int
+    /// A match: their color joins the tint.
+    var matched: Bool
+    /// The meetCount when they arrived: their own jump in and leap play once, then.
+    var arrival: Int
 }
 
-private struct WireframeBadge: View {
-    let c: BadgeConfiguration
-    @Environment(\.theme) private var theme
-
-    private var worn: Bool { c.presentation == .worn }
-    private var nameSize: CGFloat {
-        switch (c.layout, worn) {
-        case (.horizontal, true): return 112
-        case (.vertical, true): return 88
-        default: return 56
+extension Color {
+    /// An even blend of colors (nil for none).
+    static func blend(_ colors: [Color]) -> Color? {
+        guard var out = colors.first else { return nil }
+        for (i, c) in colors.dropFirst().enumerated() {
+            out = out.mix(with: c, by: 1 / Double(i + 2))
         }
-    }
-
-    var body: some View {
-        ZStack {
-            (c.matchColor ?? theme.badgeIdle)
-                .animation(.easeInOut(duration: 0.6), value: c.matchColor)
-
-            if c.layout == .horizontal {
-                HStack(alignment: .center, spacing: 32) {
-                    nameAndTags
-                    DesignElementPlaceholder(label: "Design element")
-                        .frame(width: 200, height: 200)
-                }
-                .padding(.horizontal, 56)
-            } else {
-                VStack(alignment: .leading) {
-                    HStack {
-                        Spacer()
-                        DesignElementPlaceholder(label: "Design element")
-                            .frame(width: worn ? 200 : 130, height: worn ? 200 : 130)
-                    }
-                    Spacer()
-                    nameAndTags
-                }
-                .padding(worn ? 30 : 24)
-                .padding(.top, worn ? 40 : 0)
-                .padding(.bottom, worn ? 40 : 6)
-            }
-
-            EdgeGlow(intensity: c.glow)
-        }
-    }
-
-    private var nameAndTags: some View {
-        VStack(alignment: .leading, spacing: worn ? 20 : 14) {
-            Text(c.name)
-                .font(.system(size: nameSize, weight: .bold))
-                .minimumScaleFactor(0.5)
-                .lineLimit(1)
-                .foregroundStyle(theme.ink)
-
-            if let front = c.frontTag {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(front)
-                        .font(.system(size: worn ? 30 : 22, weight: .bold))
-                        .padding(.horizontal, 20).padding(.vertical, 12)
-                        .background(.white, in: RoundedRectangle(cornerRadius: 22))
-                        .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
-                                                removal: .opacity))
-                    let rest = c.tags.filter { $0 != front }
-                    if !rest.isEmpty {
-                        Text(rest.joined(separator: " · "))
-                            .font(.system(size: worn ? 17 : 14, weight: .semibold))
-                            .foregroundStyle(theme.ink.opacity(0.6))
-                    }
-                }
-                .id(front)
-            } else {
-                FlowLayout(spacing: 10) {
-                    ForEach(c.tags, id: \.self) { TagChip(text: $0, size: worn ? 20 : 15) }
-                }
-            }
-        }
-        .animation(.spring(duration: 0.5), value: c.frontTag)
-    }
-}
-
-/// Inner white glow around the edges. 0 = none, 1 = strongest.
-struct EdgeGlow: View {
-    var intensity: Double
-
-    var body: some View {
-        Rectangle()
-            .strokeBorder(.white.opacity(0.9 * intensity), lineWidth: 6 + 30 * intensity)
-            .blur(radius: 10 + 30 * intensity)
-            .allowsHitTesting(false)
-            .animation(.easeInOut(duration: 0.8), value: intensity)
+        return out
     }
 }

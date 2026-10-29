@@ -10,24 +10,53 @@ final class AppEnvironment {
     let badge: BadgeStore
     let router = Router()
     let nearby: NearbyService
+    /// Approximate location while the app is open, so heads ups only go out when people are around.
+    let location: LocationReporter
+    let motion = MotionService()
+    /// What I share with people I meet, and requests waiting for me.
+    let sharing: SharingStore
+    /// My group encounters (three or more together) for the People list.
+    let groups: GroupStore
+    /// The Apple Watch companion (Core/Watch/WatchBridge.swift).
+    let watch: WatchBridge
     let usingMock: Bool
     /// The person you're with or met most recently (iPhone Duo opens to them).
     private(set) var currentPersonId: String?
     private var currentPersonTask: Task<Void, Never>?
 
-    init(backend: Backend, usingMock: Bool) {
+    init(backend: Backend, usingMock: Bool, start: SessionStore.Start = .restoreSaved) {
         self.backend = backend
         self.usingMock = usingMock
         let recorder = ConversationRecorder()
-        session = SessionStore(backend: backend)
+        session = SessionStore(backend: backend, start: start)
         badge = BadgeStore(backend: backend, recorder: recorder)
         nearby = NearbyService(backend: backend)
+        location = LocationReporter(backend: backend)
+        sharing = SharingStore(backend: backend)
+        groups = GroupStore(backend: backend)
+        watch = WatchBridge(backend: backend, session: session, badge: badge, sharing: sharing, router: router)
+        let badgeStore = badge
+        let nearbyService = nearby
+        nearby.onDistance = { [weak badgeStore, weak nearbyService] peerId, meters in
+            let range = nearbyService?.maxRange(for: peerId) ?? BadgeStore.standardRange
+            badgeStore?.nearbyDistance(peerId: peerId, meters: meters, maxRange: range)
+        }
+        nearby.onPresence = { [weak badgeStore] list in badgeStore?.updatePresence(list) }
     }
 
-    /// Convex when a URL is configured, otherwise the in memory mock.
+    /// SpacetimeDB. UI tests pass `-uiTestDemo` (mock, signed in as the demo
+    /// user) or `-uiTestSignedOut` (mock, on the sign in screen).
     static func live() -> AppEnvironment {
-        if let url = AppConfig.convexURL {
-            return AppEnvironment(backend: ConvexBackend(url: url), usingMock: false)
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("-uiTestSignedOut") {
+            return AppEnvironment(backend: MockBackend(newAccount: true), usingMock: true, start: .signedOut)
+        }
+        if arguments.contains("-uiTestDemo") {
+            return AppEnvironment(backend: MockBackend(), usingMock: true, start: .signedIn(MockBackend.demoUserId))
+        }
+        AppConfig.forgetConvexSignInOnce()
+        if let backend = SpacetimeBackend(host: AppConfig.spacetimeHost, database: AppConfig.spacetimeDatabase) {
+            return AppEnvironment(backend: backend, usingMock: false)
         }
         return AppEnvironment(backend: MockBackend(), usingMock: true)
     }
@@ -42,6 +71,10 @@ final class AppEnvironment {
         if let userId {
             badge.start(userId: userId)
             nearby.start(userId: userId)
+            sharing.start(userId: userId)
+            groups.start(userId: userId)
+            // Mock backend (previews, UI tests): no location prompt
+            if !usingMock { location.start(userId: userId) }
             currentPersonTask = Task { [backend] in
                 do {
                     for try await id in backend.currentPerson(userId: userId) { self.currentPersonId = id }
@@ -52,6 +85,10 @@ final class AppEnvironment {
         } else {
             badge.stop()
             nearby.stop()
+            sharing.stop()
+            groups.stop()
+            watch.reset()
+            location.stop()
             currentPersonId = nil
         }
     }

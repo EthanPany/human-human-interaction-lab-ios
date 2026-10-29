@@ -5,36 +5,60 @@ options:
   bundleIdPrefix: com.ethanpany
   deploymentTarget:
     iOS: "26.0"
+    # The Apple Watch companion (HHILWatch): the oldest watchOS the Xcode 26 SDK targets
+    watchOS: "26.0"
   createIntermediateGroups: true
 configFiles:
   Debug: Config/App.xcconfig
   Release: Config/App.xcconfig
-packages:
-  ConvexMobile:
-    url: https://github.com/get-convex/convex-swift
-    from: 0.7.0
 targets:
   HHIL:
     type: application
     platform: iOS
     sources:
       - path: HHIL
+        excludes:
+          - "Resources/Fonts/*.txt"
+      # The phone and watch message format (Core/Watch/WatchBridge.swift)
+      - path: WatchShared
+    # The Apple Watch app ships inside the iOS app (Watch/ in the bundle)
     dependencies:
-      - package: ConvexMobile
+      - target: HHILWatch
+    scheme:
+      testTargets:
+        - HHILUITests
     info:
       path: HHIL/Info.plist
       properties:
         CFBundleDisplayName: HHIL
+        # From the build settings, so scripts/upload-testflight.sh can raise the build number
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSNearbyInteractionUsageDescription: Your badge lights up when someone you should meet is close by.
+        # Bluetooth assist for UWB, only while the badge is worn full screen (no background mode:
+        # it stops with ranging when the badge is taken off or the app leaves the screen)
+        NSBluetoothAlwaysUsageDescription: While you wear your badge, Bluetooth tells it which badges are around, so it reacts sooner in a crowd. It sends only a short code that changes every 15 minutes, never your name.
         NSMicrophoneUsageDescription: Records conversations so your agent can send you a summary.
         NSSpeechRecognitionUsageDescription: Transcribes conversations on your phone for your summary.
+        NSCameraUsageDescription: Take a profile photo for the people you meet.
+        NSMotionUsageDescription: Your avatar notices when you walk, run or ride, and bounces along with you.
+        NSLocationWhenInUseUsageDescription: Your agent texts you about someone worth meeting only when you are both at the same place. Only an approximate location is shared, while the app is open, and it is deleted after 15 minutes.
         LSApplicationQueriesSchemes: [sms]
-        ConvexURL: $(CONVEX_URL)
+        # Standard encryption only (HTTPS), so no export compliance documents
+        ITSAppUsesNonExemptEncryption: false
+        # Light only (the design has no dark variant)
+        UIUserInterfaceStyle: Light
+        # General Sans, fetched by scripts/fetch-fonts.sh (not in git, see the license)
+        UIAppFonts:
+          - GeneralSans-Regular.otf
+          - GeneralSans-Medium.otf
+          - GeneralSans-Semibold.otf
+          - GeneralSans-Bold.otf
         AgentPhone: $(AGENT_PHONE)
     settings:
       base:
@@ -43,5 +67,104 @@ targets:
         DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
-        MARKETING_VERSION: "0.1"
+        MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Apple silicon simulators only (faster builds)
+        "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
+        # iPhone Duo hinge API (Platform/Fold.swift): the iOS 27.0 beta SDK
+        # (27A5218g) has no hinge symbols yet, so HINGE_API stays off. Turn it on
+        # per SDK here, e.g. "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphoneos27.1*]",
+        # once an SDK ships the API.
+  # Apple Watch companion: the watch is for the wearer (the badge on the
+  # lanyard is for others). Talks only to the phone, over WatchConnectivity.
+  # A single target watch app, embedded in the iOS app by the dependency above.
+  # Keep MARKETING_VERSION equal to the iOS app's (App Store Connect checks).
+  HHILWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - path: HHILWatch
+      - path: WatchShared
+      # The avatar body shapes, shared with the phone
+      - path: HHIL/DesignSystem/Avatar/AvatarShapeKind.swift
+    dependencies:
+      - target: HHILWatchWidgets
+    scheme: {}
+    entitlements:
+      path: HHILWatch/HHILWatch.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.ethanpany.hhil.watch
+    info:
+      path: HHILWatch/Info.plist
+      properties:
+        CFBundleDisplayName: HHIL
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: com.ethanpany.hhil
+        WKRunsIndependentlyOfCompanionApp: false
+        NSMotionUsageDescription: Your watch feels a handshake with someone beside you and asks whether to share your card. Motion is read only while someone is within 1 m, and never leaves your watch.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ethanpany.hhil.watchkitapp
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "4"
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SKIP_INSTALL: YES
+        "EXCLUDED_ARCHS[sdk=watchsimulator*]": x86_64
+  # Smart Stack widget and complications (nearest match, recording), inside the watch app
+  HHILWatchWidgets:
+    type: app-extension
+    platform: watchOS
+    sources:
+      - path: HHILWatchWidgets
+      - path: WatchShared
+      - path: HHILWatch/Design/WatchTheme.swift
+    entitlements:
+      path: HHILWatchWidgets/HHILWatchWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.ethanpany.hhil.watch
+    info:
+      path: HHILWatchWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: HHIL
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ethanpany.hhil.watchkitapp.widgets
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "4"
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SKIP_INSTALL: YES
+        "EXCLUDED_ARCHS[sdk=watchsimulator*]": x86_64
+  # Screenshot walkthrough on the mock backend (CI: the screenshots job)
+  HHILUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: HHILUITests
+    dependencies:
+      - target: HHIL
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ethanpany.hhil.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        TEST_TARGET_NAME: HHIL
+        "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64

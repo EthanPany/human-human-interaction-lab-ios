@@ -16,6 +16,7 @@ struct RootView: View {
             env.userDidChange(id)
         }
         .onFoldChange(perform: handleFold)
+        .onAppear { Feedback.shared.prepare() }
     }
 
     /// iPhone Duo: closing shows the worn badge on the outer display; opening
