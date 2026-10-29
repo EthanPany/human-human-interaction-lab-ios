@@ -3,7 +3,8 @@ import Foundation
 /// Everything the app needs from the server. Views and stores only talk to
 /// this protocol, so SpacetimeBackend can be swapped for the mock in previews
 /// and UI tests.
-protocol Backend: AnyObject {
+/// Contact sharing and the profile photo live in `SharingBackend`.
+protocol Backend: AnyObject, SharingBackend {
     // Account
     func signIn(phone: String, name: String?, password: String?) async throws -> String
     func heartbeat(userId: String) async throws

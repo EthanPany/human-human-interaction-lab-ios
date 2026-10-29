@@ -13,6 +13,8 @@ final class AppEnvironment {
     /// Approximate location while the app is open, so heads ups only go out when people are around.
     let location: LocationReporter
     let motion = MotionService()
+    /// What I share with people I meet, and requests waiting for me.
+    let sharing: SharingStore
     let usingMock: Bool
     /// The person you're with or met most recently (iPhone Duo opens to them).
     private(set) var currentPersonId: String?
@@ -26,6 +28,7 @@ final class AppEnvironment {
         badge = BadgeStore(backend: backend, recorder: recorder)
         nearby = NearbyService(backend: backend)
         location = LocationReporter(backend: backend)
+        sharing = SharingStore(backend: backend)
         let badgeStore = badge
         let nearbyService = nearby
         nearby.onDistance = { [weak badgeStore, weak nearbyService] peerId, meters in
@@ -62,6 +65,7 @@ final class AppEnvironment {
         if let userId {
             badge.start(userId: userId)
             nearby.start(userId: userId)
+            sharing.start(userId: userId)
             // Mock backend (previews, UI tests): no location prompt
             if !usingMock { location.start(userId: userId) }
             currentPersonTask = Task { [backend] in
@@ -74,6 +78,7 @@ final class AppEnvironment {
         } else {
             badge.stop()
             nearby.stop()
+            sharing.stop()
             location.stop()
             currentPersonId = nil
         }

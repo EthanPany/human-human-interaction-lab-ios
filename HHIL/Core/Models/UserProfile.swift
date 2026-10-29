@@ -30,13 +30,15 @@ struct UserProfile: Decodable, Identifiable {
     var respondFromM: Double? = nil
     /// Encounters under a minute leave no record (Settings > Recording). Nil: on.
     var dropShortEncounters: Bool? = nil
+    /// Square profile photo for People rows and pages (the badge keeps the jelly avatar).
+    var profilePhotoUrl: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
         case phone, name, headline, company, location, tags, lookingFor, offers, hobbies, appearance
         case californiaMode, recordConversations, hasPassword
         case avatarShape, avatarColor, badgeLayout, photoUrl, agentLine, agentConnected
-        case respondFromM, dropShortEncounters
+        case respondFromM, dropShortEncounters, profilePhotoUrl
     }
 
     var displayName: String { name?.isEmpty == false ? name! : "Your name" }
@@ -44,6 +46,7 @@ struct UserProfile: Decodable, Identifiable {
     var avatar: AvatarStyle { AvatarStyle(shape: avatarShape, color: avatarColor) }
     var layout: BadgeLayout { BadgeLayout(rawValue: badgeLayout ?? "") ?? .avatar }
     var photoURL: URL? { photoUrl.flatMap(URL.init(string:)) }
+    var profilePhotoURL: URL? { profilePhotoUrl.flatMap(URL.init(string:)) }
 
     /// Enough filled in for matching to work (drives the sleepy avatar).
     var isMatchable: Bool { name?.isEmpty == false && !(tags ?? []).isEmpty }

@@ -111,6 +111,19 @@ final class SessionStore {
         }
     }
 
+    /// Square profile photo (People rows and pages). Pass nil to remove it.
+    func setProfilePhoto(_ jpeg: Data?) async {
+        guard let userId else { return }
+        isUploading = true
+        defer { isUploading = false }
+        do {
+            let storageId = try await jpeg.asyncMap { try await backend.uploadImage($0) }
+            try await backend.setProfilePhoto(userId: userId, storageId: storageId)
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
     func addMoment(_ jpeg: Data, caption: String?) async {
         guard let userId else { return }
         isUploading = true

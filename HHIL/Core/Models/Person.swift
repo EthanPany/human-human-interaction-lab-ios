@@ -16,8 +16,24 @@ struct PersonSummary: Decodable, Identifiable, Hashable {
     var lastSummary: String?
     /// False for people I met but haven't saved yet (nil from older servers).
     var saved: Bool? = nil
+    /// Their square profile photo (nil: show the jelly avatar).
+    var profilePhotoUrl: String? = nil
+    /// The pair's match score (0...1) and whether it clears the threshold.
+    var matchScore: Double? = nil
+    var matched: Bool? = nil
+    /// First time we were together in person (nil: never met in person).
+    var metAt: Double? = nil
+    var encounterCount: Int? = nil
+    /// Topics from every encounter, and every summary (search).
+    var topics: [String]? = nil
+    var notes: String? = nil
+    /// They share contact info with me / I share mine with them.
+    var sharedWithMe: Bool? = nil
+    var sharedByMe: Bool? = nil
 
     var displayName: String { name ?? "Someone" }
+    var profilePhotoURL: URL? { profilePhotoUrl.flatMap(URL.init(string:)) }
+    var metDate: Date? { metAt.map { Date(timeIntervalSince1970: $0 / 1000) } }
     var avatar: AvatarStyle { AvatarStyle(shape: avatarShape, color: avatarColor) }
     var connectedDate: Date { Date(timeIntervalSince1970: connectedAt / 1000) }
 
@@ -26,6 +42,8 @@ struct PersonSummary: Decodable, Identifiable, Hashable {
         l.id == r.id && l.name == r.name && l.headline == r.headline && l.company == r.company
             && l.tags == r.tags && l.lastSummary == r.lastSummary && l.saved == r.saved
             && l.connectedAt == r.connectedAt && l.avatarShape == r.avatarShape && l.avatarColor == r.avatarColor
+            && l.profilePhotoUrl == r.profilePhotoUrl && l.matched == r.matched && l.metAt == r.metAt
+            && l.sharedWithMe == r.sharedWithMe && l.sharedByMe == r.sharedByMe && l.topics == r.topics
     }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
@@ -42,9 +60,12 @@ struct PersonProfile: Decodable {
     var avatarShape: String?
     var avatarColor: String?
     var photoUrl: String?
+    /// Square profile photo (nil: the jelly avatar).
+    var profilePhotoUrl: String? = nil
 
     var avatar: AvatarStyle { AvatarStyle(shape: avatarShape, color: avatarColor) }
     var photoURL: URL? { photoUrl.flatMap(URL.init(string:)) }
+    var profilePhotoURL: URL? { profilePhotoUrl.flatMap(URL.init(string:)) }
 }
 
 struct ConversationInfo: Decodable {

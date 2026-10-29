@@ -33,6 +33,11 @@ final class MockBackend: Backend {
     )
     private var profileWatchers: [UUID: AsyncThrowingStream<UserProfile?, Error>.Continuation] = [:]
 
+    /// Uploaded photos (storage id to JPEG), served back as data URLs.
+    var uploads: [String: Data] = [:]
+    /// Contact sharing state (MockBackend+Sharing.swift).
+    let sharingState = MockSharingState()
+
     /// True: signing in makes a fresh account (the name typed, no avatar yet),
     /// so the whole sign up flow can be walked on the mock.
     private let newAccount: Bool
@@ -81,7 +86,23 @@ final class MockBackend: Backend {
         profileWatchers.values.forEach { $0.yield(profile) }
     }
 
-    func uploadImage(_ jpeg: Data) async throws -> String { "mock-storage" }
+    func uploadImage(_ jpeg: Data) async throws -> String {
+        let id = "mock-\(UUID().uuidString)"
+        uploads[id] = jpeg
+        return id
+    }
+
+    /// A data URL for an upload, so AsyncImage shows it without a server.
+    func mockURL(_ storageId: String?) -> String? {
+        guard let storageId, let data = uploads[storageId] else { return nil }
+        return "data:image/jpeg;base64,\(data.base64EncodedString())"
+    }
+
+    func setProfilePhoto(userId: String, storageId: String?) async throws {
+        profile.profilePhotoUrl = mockURL(storageId)
+        profileWatchers.values.forEach { $0.yield(profile) }
+    }
+
     func setPhoto(userId: String, storageId: String?) async throws {}
     func moments(userId: String) -> AsyncThrowingStream<[Moment], Error> { once([]) }
     func addMoment(userId: String, storageId: String, caption: String?) async throws {}
@@ -192,21 +213,28 @@ final class MockBackend: Backend {
     func markMet(userId: String, otherId: String) async throws {}
 
     /// Sample people so the People tab has something to show.
-    private static let people: [PersonSummary] = {
+    static let people: [PersonSummary] = {
         let now = Date().timeIntervalSince1970 * 1000
         return [
             PersonSummary(id: "p1", name: "Maya", headline: "Product designer", company: "Figma",
                           location: "San Francisco, CA", tags: ["Product designer", "Climbing"],
                           avatarShape: "blob", avatarColor: "#3BB52D", photoUrl: nil, connectedAt: now - 20 * 60_000,
-                          lastSummary: "Maya leads design systems at Figma and is looking for iOS engineers for a side project."),
+                          lastSummary: "Maya leads design systems at Figma and is looking for iOS engineers for a side project.",
+                          saved: true, matchScore: 0.82, matched: true, metAt: now - 76 * 60_000, encounterCount: 2,
+                          topics: ["Design systems", "Hiring", "Hackathons", "Robot demos"],
+                          notes: "Maya leads design systems at Figma. Quick hello at the badge table.",
+                          sharedWithMe: true, sharedByMe: false),
             PersonSummary(id: "p2", name: "Daniel Okafor", headline: "ML engineer", company: "Anthropic",
                           location: "Berkeley, CA", tags: ["Startup founder"],
                           avatarShape: "flower", avatarColor: "#EB8FFF", photoUrl: nil, connectedAt: now - 95 * 60_000,
-                          lastSummary: "Daniel works on evals and wants to try the badge at his next meetup."),
+                          lastSummary: "Daniel works on evals and wants to try the badge at his next meetup.",
+                          saved: false, matchScore: 0.31, matched: false, metAt: now - 95 * 60_000, encounterCount: 1,
+                          topics: ["Evals", "Meetups"], notes: "Daniel works on evals.",
+                          sharedWithMe: false, sharedByMe: false),
         ]
     }()
 
-    private static var allPeople: [PersonSummary] { DemoReel.isOn ? people + demoPeople : people }
+    static var allPeople: [PersonSummary] { DemoReel.isOn ? people + demoPeople : people }
 
     /// Extra people for the demo reel, so the People list scrolls.
     private static let demoPeople: [PersonSummary] = {
@@ -220,10 +248,18 @@ final class MockBackend: Backend {
             ("p8", "Jordan Lee", "iOS engineer", "Airbnb", "San Francisco, CA", "flower", "#87D9FB", 460),
             ("p9", "Mei Chen", "Startup founder", "Y Combinator", "Palo Alto, CA", "blob", "#FFC83D", 540),
         ]
-        return rows.map { r in
-            PersonSummary(id: r.0, name: r.1, headline: r.2, company: r.3, location: r.4, tags: [r.2],
-                          avatarShape: r.5, avatarColor: r.6, photoUrl: nil, connectedAt: now - r.7 * 60_000,
-                          lastSummary: "\(r.1.split(separator: " ").first ?? "") talked about \(r.2.lowercased()) work and swapped ideas for a weekend project.")
+        return rows.enumerated().map { index, r -> PersonSummary in
+            // Varied, so filters and grouping have something to sort (a day earlier for the last few: another event)
+            let daysAgo = index >= 4 ? 1.0 : 0
+            let met = now - r.7 * 60_000 - daysAgo * 86_400_000
+            return PersonSummary(id: r.0, name: r.1, headline: r.2, company: r.3, location: r.4, tags: [r.2],
+                          avatarShape: r.5, avatarColor: r.6, photoUrl: nil, connectedAt: met,
+                          lastSummary: "\(r.1.split(separator: " ").first ?? "") talked about \(r.2.lowercased()) work and swapped ideas for a weekend project.",
+                          saved: index % 2 == 0, matchScore: [0.9, 0.62, 0.4, 0.75, 0.2, 0.55, 0.48][index],
+                          matched: [true, true, false, true, false, true, true][index],
+                          metAt: index == 3 ? nil : met, encounterCount: index == 3 ? 0 : 1,
+                          topics: [r.2, "Weekend project"], notes: nil,
+                          sharedWithMe: index == 0, sharedByMe: index == 0)
         }
     }()
 

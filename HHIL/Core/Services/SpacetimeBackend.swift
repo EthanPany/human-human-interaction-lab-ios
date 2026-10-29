@@ -173,6 +173,66 @@ final class SpacetimeBackend: Backend, @unchecked Sendable {
         try await send("location:clear", ["userId": userId])
     }
 
+    // MARK: Sharing and profile photo (SharingBackend; spacetime/src/api/sharing.ts, profilePhoto.ts)
+
+    func setProfilePhoto(userId: String, storageId: String?) async throws {
+        try await send("users:setProfilePhoto", ["userId": userId, "storageId": storageId])
+    }
+
+    func shareItems(userId: String) -> AsyncThrowingStream<[ShareItem], Error> {
+        poll("sharing:items", ["userId": userId], [ShareItem].self)
+    }
+
+    @discardableResult
+    func saveShareItem(userId: String, draft: ShareItemDraft) async throws -> String {
+        let item: [String: Any?] = [
+            "id": draft.id,
+            "kind": draft.kind.rawValue,
+            "label": draft.label.nilIfBlank,
+            "value": draft.kind == .image ? nil : draft.value.nilIfBlank,
+            "storageId": draft.storageId,
+            "includeByDefault": draft.includeByDefault,
+        ]
+        return try await call("sharing:saveItem", ["userId": userId, "item": compact(item)], String.self)
+    }
+
+    func removeShareItem(userId: String, itemId: String) async throws {
+        try await send("sharing:removeItem", ["userId": userId, "itemId": itemId])
+    }
+
+    func reorderShareItems(userId: String, itemIds: [String]) async throws {
+        try await send("sharing:reorder", ["userId": userId, "itemIds": itemIds])
+    }
+
+    func requestShare(userId: String, otherId: String, offer: Bool, itemIds: [String]?) async throws {
+        try await send("sharing:request", ["userId": userId, "otherId": otherId, "kind": offer ? "offer" : "ask", "itemIds": itemIds])
+    }
+
+    func respondToShare(userId: String, requestId: String, approve: Bool, itemIds: [String]?) async throws {
+        try await send("sharing:respond", ["userId": userId, "requestId": requestId, "approve": approve, "itemIds": itemIds])
+    }
+
+    func cancelShareRequest(userId: String, requestId: String) async throws {
+        try await send("sharing:cancel", ["userId": userId, "requestId": requestId])
+    }
+
+    func revokeShare(userId: String, otherId: String, itemIds: [String]?) async throws {
+        try await send("sharing:revoke", ["userId": userId, "otherId": otherId, "itemIds": itemIds])
+    }
+
+    func shareHandshake(userId: String, otherId: String, itemIds: [String]?) async throws -> HandshakeResult {
+        try await call("sharing:handshake", ["userId": userId, "otherId": otherId, "itemIds": itemIds, "source": "watch"],
+                       HandshakeResult.self)
+    }
+
+    func shareInbox(userId: String) -> AsyncThrowingStream<[ShareRequest], Error> {
+        poll("sharing:inbox", ["userId": userId], [ShareRequest].self, every: .seconds(2))
+    }
+
+    func sharing(userId: String, otherId: String) -> AsyncThrowingStream<SharingWith, Error> {
+        poll("sharing:with", ["userId": userId, "otherId": otherId], SharingWith.self)
+    }
+
     // MARK: Transport
 
     private struct Envelope<T: Decodable>: Decodable {
