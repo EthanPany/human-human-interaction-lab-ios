@@ -38,6 +38,7 @@ targets:
         NSBluetoothAlwaysUsageDescription: While you wear your badge, Bluetooth tells it which badges are around, so it reacts sooner in a crowd. It sends only a short code that changes every 15 minutes, never your name.
         NSMicrophoneUsageDescription: Records conversations so your agent can send you a summary.
         NSSpeechRecognitionUsageDescription: Transcribes conversations on your phone for your summary.
+        NSCameraUsageDescription: Take a profile photo for the people you meet.
         NSMotionUsageDescription: Your avatar notices when you walk, run or ride, and bounces along with you.
         NSLocationWhenInUseUsageDescription: Your agent texts you about someone worth meeting only when you are both at the same place. Only an approximate location is shared, while the app is open, and it is deleted after 15 minutes.
         LSApplicationQueriesSchemes: [sms]

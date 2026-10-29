@@ -21,6 +21,7 @@ struct ProfileEditView: View {
     var body: some View {
         NavigationStack {
             Form {
+                ProfilePhotoSection()
                 Section("You") {
                     TextField("Name", text: $name)
                         .textContentType(.name)

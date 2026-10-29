@@ -99,10 +99,15 @@ struct ProfileView: View {
     private var topBar: some View {
         let uploading = env.session.isUploading
         return HStack(spacing: 12) {
-            AvatarView(shape: env.session.profile?.avatar.shape ?? .blob,
-                       color: env.session.profile?.avatar.color ?? theme.red,
-                       animated: false, seed: 1)
-                .frame(width: 38, height: 38)
+            // Your profile photo (or avatar): tap to edit your profile and photo
+            Button { editing = true } label: {
+                PersonPhoto(url: env.session.profile?.profilePhotoURL,
+                            avatar: env.session.profile?.avatar ?? AvatarStyle(shape: nil, color: nil),
+                            seed: 1, expression: .idle)
+                    .frame(width: 38, height: 38)
+            }
+            .buttonStyle(PressScaleStyle())
+            .accessibilityLabel("Edit profile and photo")
             Spacer()
             RegionPill()
             PhotosPicker(selection: $newMoment, matching: .images) {
