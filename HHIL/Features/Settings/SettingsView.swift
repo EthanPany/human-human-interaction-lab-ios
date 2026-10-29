@@ -58,6 +58,7 @@ struct SettingsView: View {
             }
 
             NearbySection()
+            LocationSection()
 
             Section {
                 Button("Sign out", role: .destructive) { env.session.signOut() }
