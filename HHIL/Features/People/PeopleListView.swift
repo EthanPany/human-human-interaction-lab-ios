@@ -22,7 +22,9 @@ struct PeopleListView: View {
         NavigationSplitView(columnVisibility: $columns) {
             sidebar(selection: $router.selectedPersonId)
         } detail: {
-            if let id = router.selectedPersonId {
+            if let id = router.selectedPersonId, let groupId = GroupNames.encounterId(fromSelection: id) {
+                GroupDetailView(encounterId: groupId)
+            } else if let id = router.selectedPersonId {
                 PersonDetailView(personId: id)
             } else {
                 NoPersonSelected(hasPeople: !people.isEmpty)
@@ -48,6 +50,10 @@ struct PeopleListView: View {
             }
             if query.isFiltering && !people.isEmpty {
                 filterSummary(shown: shown.count)
+            }
+            // Group encounters (three or more together), GroupViews.swift
+            if !query.isFiltering {
+                GroupEncountersSection(search: search)
             }
             ForEach(query.groups(shown, by: grouping)) { group in
                 Section {

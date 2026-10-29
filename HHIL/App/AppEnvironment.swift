@@ -15,6 +15,8 @@ final class AppEnvironment {
     let motion = MotionService()
     /// What I share with people I meet, and requests waiting for me.
     let sharing: SharingStore
+    /// My group encounters (three or more together) for the People list.
+    let groups: GroupStore
     let usingMock: Bool
     /// The person you're with or met most recently (iPhone Duo opens to them).
     private(set) var currentPersonId: String?
@@ -29,6 +31,7 @@ final class AppEnvironment {
         nearby = NearbyService(backend: backend)
         location = LocationReporter(backend: backend)
         sharing = SharingStore(backend: backend)
+        groups = GroupStore(backend: backend)
         let badgeStore = badge
         let nearbyService = nearby
         nearby.onDistance = { [weak badgeStore, weak nearbyService] peerId, meters in
@@ -66,6 +69,7 @@ final class AppEnvironment {
             badge.start(userId: userId)
             nearby.start(userId: userId)
             sharing.start(userId: userId)
+            groups.start(userId: userId)
             // Mock backend (previews, UI tests): no location prompt
             if !usingMock { location.start(userId: userId) }
             currentPersonTask = Task { [backend] in
@@ -79,6 +83,7 @@ final class AppEnvironment {
             badge.stop()
             nearby.stop()
             sharing.stop()
+            groups.stop()
             location.stop()
             currentPersonId = nil
         }

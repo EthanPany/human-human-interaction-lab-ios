@@ -154,8 +154,9 @@ struct PersonDetailView: View {
     private func encounter(_ e: Encounter, title: String) -> some View {
         VStack(spacing: 12) {
             Card {
-                SectionHeader(title: title)
+                SectionHeader(title: e.isGroup ? "\(title) · group" : title)
                 Text(whenLine(e)).font(theme.caption).foregroundStyle(theme.inkSecondary)
+                if e.isGroup { EncounterGroupLine(encounter: e) }
                 if let text = e.summary?.nilIfBlank {
                     Text(text).font(theme.body).foregroundStyle(theme.ink)
                 } else if e.isOngoing {
