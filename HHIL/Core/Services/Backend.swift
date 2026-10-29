@@ -25,6 +25,10 @@ protocol Backend: AnyObject {
     func reportDistance(userId: String, peerId: String, meters: Double, extended: Bool) async throws
     /// The badge is worn full screen (UWB on) or not; off drops my distances at once.
     func setRanging(userId: String, on: Bool) async throws
+    /// The short id this badge advertises over Bluetooth (rotates; nil: no Bluetooth assist on this server).
+    func bleId(userId: String) async throws -> BleIdentity?
+    /// The badges this phone hears over Bluetooth, with their smoothed signal strength.
+    func reportBle(userId: String, sightings: [BleSighting]) async throws
     func finishConversation(id: String, transcript: String?) async throws
     /// California mode: my answer to "record this conversation?" (recording needs both yeses).
     func setRecordingConsent(userId: String, conversationId: String, agree: Bool) async throws
@@ -45,4 +49,24 @@ protocol Backend: AnyObject {
 extension Backend {
     func reportLocation(userId: String, latitude: Double, longitude: Double, accuracy: Double) async throws {}
     func clearLocation(userId: String) async throws {}
+}
+
+/// The rotating Bluetooth id from `nearby:bleId` (never the user id).
+struct BleIdentity: Decodable, Equatable {
+    let bleId: String
+    /// Milliseconds since 1970: ask for the next one after this.
+    let expiresAt: Double
+}
+
+/// One badge heard over Bluetooth (`nearby:reportBle`).
+struct BleSighting {
+    let bleId: String
+    /// Smoothed signal strength, dBm (about -45 at arm's length, -90 far away).
+    let rssi: Double
+}
+
+/// Only SpacetimeDB runs the Bluetooth assist; the mock has none.
+extension Backend {
+    func bleId(userId: String) async throws -> BleIdentity? { nil }
+    func reportBle(userId: String, sightings: [BleSighting]) async throws {}
 }

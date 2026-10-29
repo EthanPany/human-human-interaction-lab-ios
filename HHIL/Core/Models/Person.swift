@@ -105,6 +105,20 @@ struct Peer: Decodable, Identifiable {
     var tokenForMe: String?
     /// A match (ranged first). The server sends peers most important first.
     var isMatch: Bool? = nil
+    /// The server's ranking (higher first): with me, matches in the area,
+    /// others in the area, unknown, away. Nil from older servers (use the order).
+    var priority: Double? = nil
+    /// The server knows they are around (a fresh distance, or Bluetooth hears them).
+    var inArea: Bool? = nil
+    /// The short id their badge advertises over Bluetooth right now (rotates).
+    var bleId: String? = nil
+    /// The pair's distance merged from both phones, its source (uwb or ble) and age.
+    var meters: Double? = nil
+    var source: String? = nil
+    var ageMs: Double? = nil
+    /// Matches only: the shared pair color and their avatar color (edge glows).
+    var color: String? = nil
+    var avatarColor: String? = nil
 
     var id: String { userId }
 }

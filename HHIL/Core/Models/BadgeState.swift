@@ -35,6 +35,14 @@ struct BadgeState: Decodable {
     var peerConsent: Bool?
     /// This phone may record now (both agreed, or no consent needed).
     var recordingAllowed: Bool?
+    /// The pair's distance merged from both phones (either side seeing the
+    /// other is enough), how old it is, and where it came from: "uwb", or "ble"
+    /// for a coarse Bluetooth estimate.
+    var meters: Double? = nil
+    var distanceAgeMs: Double? = nil
+    var distanceSource: String? = nil
+    /// Bluetooth alone says we are together (UWB had nothing for a while).
+    var estimated: Bool? = nil
 
     static let idle = BadgeState(
         mode: .idle, glow: 0, color: nil, frontTag: nil, peerId: nil, peerName: nil,
@@ -80,4 +88,21 @@ struct BadgeState: Decodable {
         self.peerConsent = peerConsent
         self.recordingAllowed = recordingAllowed
     }
+}
+
+/// A soft glow on one side edge of the badge for a match in the area, shown
+/// when two or more matches are around at once (BadgeStore picks up to two,
+/// one per side, and keeps each person on their side).
+struct EdgeGlow: Equatable, Identifiable {
+    enum Side: Hashable {
+        case leading, trailing
+        var opposite: Side { self == .leading ? .trailing : .leading }
+    }
+    /// The peer's user id.
+    let id: String
+    var side: Side
+    /// Their avatar color (or the pair color), "#RRGGBB".
+    var colorHex: String
+    /// 0...1 from their distance (faint when only Bluetooth hears them).
+    var intensity: Double
 }

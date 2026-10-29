@@ -110,8 +110,10 @@ final class SpacetimeBackend: Backend, @unchecked Sendable {
         poll("badge:state", ["userId": userId], BadgeState.self)
     }
 
+    /// Twice a second: new tokens, merged distances and Bluetooth presence
+    /// reach the UWB layer sooner (only polled while the badge is worn).
     func peers(userId: String) -> AsyncThrowingStream<[Peer], Error> {
-        poll("nearby:peers", ["userId": userId], [Peer].self)
+        poll("nearby:peers", ["userId": userId], [Peer].self, every: .milliseconds(500))
     }
 
     func uploadToken(userId: String, peerId: String, token: String) async throws {
@@ -124,6 +126,15 @@ final class SpacetimeBackend: Backend, @unchecked Sendable {
 
     func setRanging(userId: String, on: Bool) async throws {
         try await send("nearby:setRanging", ["userId": userId, "on": on])
+    }
+
+    func bleId(userId: String) async throws -> BleIdentity? {
+        try await call("nearby:bleId", ["userId": userId], BleIdentity?.self)
+    }
+
+    func reportBle(userId: String, sightings: [BleSighting]) async throws {
+        let list: [[String: Any]] = sightings.map { ["bleId": $0.bleId, "rssi": $0.rssi] }
+        try await send("nearby:reportBle", ["userId": userId, "sightings": list])
     }
 
     func finishConversation(id: String, transcript: String?) async throws {
@@ -209,12 +220,13 @@ final class SpacetimeBackend: Backend, @unchecked Sendable {
     /// Poll a query about once a second; yield only when the answer changes.
     /// Bad arguments (4xx) end the stream (the caller decides what to do);
     /// network trouble is retried with a short backoff.
-    private func poll<T: Decodable>(_ path: String, _ args: [String: Any?], _ type: T.Type) -> AsyncThrowingStream<T, Error> {
+    private func poll<T: Decodable>(_ path: String, _ args: [String: Any?], _ type: T.Type,
+                                    every: Duration? = nil) -> AsyncThrowingStream<T, Error> {
         let request: Data
         do { request = try body(path, args) } catch {
             return AsyncThrowingStream { $0.finish(throwing: error) }
         }
-        let interval = pollInterval
+        let interval = every ?? pollInterval
         return AsyncThrowingStream { continuation in
             let task = Task { [weak self] in
                 var last: Data?
