@@ -60,7 +60,7 @@ struct SettingsView: View {
 
             NearbySection()
 
-            Section {
+            if !AppConfig.convexDisabled { Section {
                 Picker("Backend", selection: $provider) {
                     ForEach(BackendProvider.allCases) { Text($0.displayName).tag($0) }
                 }
@@ -70,7 +70,7 @@ struct SettingsView: View {
                 Text("Backend")
             } footer: {
                 Text("Both run the same app. Each keeps its own accounts, so switching signs you out.")
-            }
+            } }
 
             Section {
                 Button("Sign out", role: .destructive) { env.session.signOut() }

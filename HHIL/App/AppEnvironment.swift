@@ -43,6 +43,7 @@ final class AppEnvironment {
         if arguments.contains("-uiTestDemo") {
             return AppEnvironment(backend: MockBackend(), usingMock: true, start: .signedIn(MockBackend.demoUserId))
         }
+        AppConfig.moveOffConvexIfNeeded()
         switch AppConfig.backendProvider {
         case .convex:
             return AppEnvironment(backend: ConvexBackend(url: AppConfig.convexURL), usingMock: false, provider: .convex)

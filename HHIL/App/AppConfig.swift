@@ -33,9 +33,23 @@ enum AppConfig {
 
     private static let providerKey = "backendProvider"
 
-    /// The provider picked in Settings, Convex by default.
+    /// SpacetimeDB for everyone: Convex is switched off (free plan limit). The
+    /// Settings picker stays so Convex can come back by changing this line.
+    static let convexDisabled = true
+
+    /// The provider picked in Settings, SpacetimeDB by default.
     static var backendProvider: BackendProvider {
-        UserDefaults.standard.string(forKey: providerKey).flatMap(BackendProvider.init(rawValue:)) ?? .convex
+        if convexDisabled { return .spacetime }
+        return UserDefaults.standard.string(forKey: providerKey).flatMap(BackendProvider.init(rawValue:)) ?? .spacetime
+    }
+
+    /// A phone last signed in on Convex holds a Convex user id, which SpacetimeDB
+    /// does not know: forget it once so the person signs in again there.
+    static func moveOffConvexIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard convexDisabled, defaults.string(forKey: providerKey) != BackendProvider.spacetime.rawValue else { return }
+        defaults.removeObject(forKey: "userId")
+        defaults.set(BackendProvider.spacetime.rawValue, forKey: providerKey)
     }
 
     static func setBackendProvider(_ provider: BackendProvider) {

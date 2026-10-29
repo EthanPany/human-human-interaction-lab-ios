@@ -184,7 +184,10 @@ final class NearbyService: NSObject {
                     // (e.g. iPhone 14, U1) gives no readings at all. Standard
                     // range (~9 m) already covers our 8 m glow, so it is off
                     // unless turned on in Settings > Nearby.
-                    if #available(iOS 17.0, *), Self.supportsExtendedRange, Self.extendedRangeEnabled {
+                    // The peer's token says whether its chip supports it, so a
+                    // mixed pair falls back to standard range instead of going silent.
+                    if #available(iOS 17.0, *), Self.supportsExtendedRange, Self.extendedRangeEnabled,
+                       token.deviceCapabilities.supportsExtendedDistanceMeasurement {
                         config.isExtendedDistanceMeasurementEnabled = true
                     }
                     session.run(config)
