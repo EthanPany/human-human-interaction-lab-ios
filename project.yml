@@ -5,6 +5,8 @@ options:
   bundleIdPrefix: com.ethanpany
   deploymentTarget:
     iOS: "26.0"
+    # The Apple Watch companion (HHILWatch): the oldest watchOS the Xcode 26 SDK targets
+    watchOS: "26.0"
   createIntermediateGroups: true
 configFiles:
   Debug: Config/App.xcconfig
@@ -19,6 +21,9 @@ targets:
           - "Resources/Fonts/*.txt"
       # The phone and watch message format (Core/Watch/WatchBridge.swift)
       - path: WatchShared
+    # The Apple Watch app ships inside the iOS app (Watch/ in the bundle)
+    dependencies:
+      - target: HHILWatch
     scheme:
       testTargets:
         - HHILUITests
@@ -71,6 +76,80 @@ targets:
         # (27A5218g) has no hinge symbols yet, so HINGE_API stays off. Turn it on
         # per SDK here, e.g. "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphoneos27.1*]",
         # once an SDK ships the API.
+  # Apple Watch companion: the watch is for the wearer (the badge on the
+  # lanyard is for others). Talks only to the phone, over WatchConnectivity.
+  # A single target watch app, embedded in the iOS app by the dependency above.
+  # Keep MARKETING_VERSION equal to the iOS app's (App Store Connect checks).
+  HHILWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - path: HHILWatch
+      - path: WatchShared
+      # The avatar body shapes, shared with the phone
+      - path: HHIL/DesignSystem/Avatar/AvatarShapeKind.swift
+    dependencies:
+      - target: HHILWatchWidgets
+    scheme: {}
+    entitlements:
+      path: HHILWatch/HHILWatch.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.ethanpany.hhil.watch
+    info:
+      path: HHILWatch/Info.plist
+      properties:
+        CFBundleDisplayName: HHIL
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: com.ethanpany.hhil
+        WKRunsIndependentlyOfCompanionApp: false
+        NSMotionUsageDescription: Your watch feels a handshake with someone beside you and asks whether to share your card. Motion is read only while someone is within 1 m, and never leaves your watch.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ethanpany.hhil.watchkitapp
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "4"
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SKIP_INSTALL: YES
+        "EXCLUDED_ARCHS[sdk=watchsimulator*]": x86_64
+  # Smart Stack widget and complications (nearest match, recording), inside the watch app
+  HHILWatchWidgets:
+    type: app-extension
+    platform: watchOS
+    sources:
+      - path: HHILWatchWidgets
+      - path: WatchShared
+      - path: HHILWatch/Design/WatchTheme.swift
+    entitlements:
+      path: HHILWatchWidgets/HHILWatchWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.ethanpany.hhil.watch
+    info:
+      path: HHILWatchWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: HHIL
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ethanpany.hhil.watchkitapp.widgets
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "4"
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        SKIP_INSTALL: YES
+        "EXCLUDED_ARCHS[sdk=watchsimulator*]": x86_64
   # Screenshot walkthrough on the mock backend (CI: the screenshots job)
   HHILUITests:
     type: bundle.ui-testing

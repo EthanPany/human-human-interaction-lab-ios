@@ -26,12 +26,23 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log | grep -E "error:|warning: .*(deprecated|never)|BUILD" || true
           grep -q "BUILD SUCCEEDED" build.log
+      - name: Build the Apple Watch app for the watchOS simulator
+        run: |
+          set -o pipefail
+          xcrun simctl list runtimes | grep -i watchos || echo "no watchOS simulator runtime listed"
+          xcodebuild -project HHIL.xcodeproj -scheme HHILWatch \
+            -destination 'generic/platform=watchOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee watch-build.log | grep -E "error:|warning: .*(deprecated|never)|BUILD" || true
+          grep -q "BUILD SUCCEEDED" watch-build.log
+          # The iOS build above embeds the watch app: check it is in the bundle
+          APP=$(find ~/Library/Developer/Xcode/DerivedData -maxdepth 6 -path "*Debug-iphonesimulator/HHIL.app" | head -1)
+          ls "$APP/Watch" && ls "$APP/Watch/HHILWatch.app/PlugIns"
       - name: Upload log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
-          path: build.log
+          path: "*build.log"
 
   screenshots:
     runs-on: macos-26
