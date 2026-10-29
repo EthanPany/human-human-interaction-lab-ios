@@ -233,6 +233,27 @@ final class SpacetimeBackend: Backend, @unchecked Sendable {
         poll("sharing:with", ["userId": userId, "otherId": otherId], SharingWith.self)
     }
 
+    // MARK: Group encounters (GroupBackend; spacetime/src/api/groups.ts)
+
+    func groupEncounters(userId: String) -> AsyncThrowingStream<[GroupEncounterSummary], Error> {
+        poll("groups:list", ["userId": userId], [GroupEncounterSummary].self, every: .seconds(2))
+    }
+
+    func groupEncounter(userId: String, encounterId: String) -> AsyncThrowingStream<GroupEncounterDetail?, Error> {
+        poll("groups:detail", ["userId": userId, "conversationId": encounterId], GroupEncounterDetail?.self)
+    }
+
+    func uploadTranscript(userId: String, conversationId: String, transcript: String?, startedAt: Date?,
+                          leaving: Bool) async throws {
+        try await send("conversations:finish", [
+            "conversationId": conversationId,
+            "userId": userId,
+            "transcript": transcript,
+            "startedAt": startedAt.map { ($0.timeIntervalSince1970 * 1000).rounded() },
+            "leaving": leaving,
+        ])
+    }
+
     // MARK: Transport
 
     private struct Envelope<T: Decodable>: Decodable {

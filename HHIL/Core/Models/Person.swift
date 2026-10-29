@@ -92,10 +92,14 @@ struct Encounter: Decodable, Identifiable {
     var summary: String?
     var topics: [String]
     var followUp: String?
+    /// A group encounter (three or more), and who else was there besides this person (Group.swift).
+    var group: Bool? = nil
+    var others: [EncounterPerson]? = nil
 
     var startedDate: Date { Date(timeIntervalSince1970: startedAt / 1000) }
     var isOngoing: Bool { endedAt == nil }
     var minutes: Int { Int((durationMs / 60_000).rounded()) }
+    var isGroup: Bool { group == true }
 }
 
 struct TimelineItem: Decodable, Identifiable {

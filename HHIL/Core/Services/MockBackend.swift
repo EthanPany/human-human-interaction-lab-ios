@@ -108,23 +108,30 @@ final class MockBackend: Backend {
     func addMoment(userId: String, storageId: String, caption: String?) async throws {}
     func removeMoment(userId: String, momentId: String) async throws {}
 
-    /// Cycles idle -> match (approaching) -> talking -> connected so every
-    /// badge state can be seen without a second phone.
+    /// Cycles idle -> match (approaching) -> talking -> a group (Leo, then Sam
+    /// join) -> connected so every badge state can be seen without a second phone.
     func badgeState(userId: String) -> AsyncThrowingStream<BadgeState, Error> {
         if DemoReel.isOn { return demoBadgeState() }
         return AsyncThrowingStream { continuation in
             let task = Task {
-                let steps: [(BadgeMode, Double)] = [(.idle, 0), (.match, 0.2), (.match, 0.5), (.match, 0.85), (.talking, 1), (.connected, 1)]
+                // (mode, closeness, others with me: 0 nobody, 1 Maya, 2 Maya and Leo, 3 and Sam)
+                let steps: [(BadgeMode, Double, Int)] = [(.idle, 0, 0), (.match, 0.2, 0), (.match, 0.5, 0), (.match, 0.85, 0),
+                                                        (.talking, 1, 1), (.talking, 1, 2), (.talking, 1, 3), (.connected, 1, 0)]
                 while !Task.isCancelled {
-                    for (mode, closeness) in steps {
-                        continuation.yield(BadgeState(
+                    for (mode, closeness, together) in steps {
+                        var s = BadgeState(
                             mode: mode, glow: closeness, color: mode == .idle ? nil : "#87D9FB",
                             frontTag: mode == .idle ? nil : "Product designer",
                             peerId: mode == .idle ? nil : "p1", peerName: mode == .idle ? nil : "Maya",
                             peerAvatarShape: "blob", peerAvatarColor: "#3BB52D", closeness: closeness,
                             conversationId: nil, recordConversations: true, californiaMode: false,
                             keywords: mode == .idle ? nil : ["Agent design", "iOS engineers", "Film photos"]
-                        ))
+                        )
+                        if together > 0 {
+                            s.members = Array(Self.mockGroupMembers.prefix(together))
+                            s.group = together >= 2
+                        }
+                        continuation.yield(s)
                         try? await Task.sleep(for: .seconds(4))
                     }
                 }
@@ -166,6 +173,16 @@ final class MockBackend: Backend {
         }
     }
 
+    /// Who joins the mock badge, in order: Maya (a match), Leo (a match), Sam (no match: joins without tint).
+    static let mockGroupMembers: [BadgeMember] = [
+        BadgeMember(id: "p1", name: "Maya", avatarShape: "blob", avatarColor: "#3BB52D", matched: true,
+                    color: "#87D9FB", joinedAt: 1),
+        BadgeMember(id: "p4", name: "Leo", avatarShape: "flower", avatarColor: "#EB8FFF", matched: true,
+                    color: "#FFD60A", joinedAt: 2),
+        BadgeMember(id: "p6", name: "Sam", avatarShape: "pill", avatarColor: "#FFC83D", matched: false,
+                    color: nil, joinedAt: 3),
+    ]
+
     func peers(userId: String) -> AsyncThrowingStream<[Peer], Error> { once([]) }
     func uploadToken(userId: String, peerId: String, token: String) async throws {}
     func reportDistance(userId: String, peerId: String, meters: Double, extended: Bool) async throws {}
@@ -179,7 +196,7 @@ final class MockBackend: Backend {
         guard let p = Self.allPeople.first(where: { $0.id == otherId }) else { return once(nil) }
         let met = p.connectedAt
         // Two separate encounters: today and an earlier one (more than 5 minutes apart)
-        let encounters = [
+        var encounters = [
             Encounter(id: "\(p.id)-2", startedAt: met - 6 * 60_000, endedAt: met, durationMs: 6 * 60_000, matched: true,
                       summary: p.lastSummary, topics: ["Design systems", "Hiring", "Hackathons"],
                       followUp: "Hey \(p.name ?? "there"), great talking at Cal Hacks! Want to grab coffee next week?"),
@@ -187,6 +204,8 @@ final class MockBackend: Backend {
                       matched: true, summary: "Quick hello at the badge table; you both wanted to see the robot demos.",
                       topics: ["Robot demos"], followUp: nil),
         ]
+        // The group with Maya and Daniel (MockBackend+Groups.swift), between the two
+        if let group = Self.mockGroupEncounter(on: p.id) { encounters.insert(group, at: 1) }
         let detail = PersonDetail(
             person: PersonProfile(
                 id: p.id, name: p.name, headline: p.headline, company: p.company, location: p.location,

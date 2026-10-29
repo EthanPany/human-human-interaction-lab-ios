@@ -43,6 +43,12 @@ struct BadgeState: Decodable {
     var distanceSource: String? = nil
     /// Bluetooth alone says we are together (UWB had nothing for a while).
     var estimated: Bool? = nil
+    /// Three or more of us together right now: one shared encounter (see Group.swift).
+    var group: Bool? = nil
+    /// Everyone else in my encounter right now, first joined first (pairs too; nil from older servers).
+    var members: [BadgeMember]? = nil
+    /// This phone records the encounter (a group records on one phone; a pair on both).
+    var isRecorder: Bool? = nil
 
     static let idle = BadgeState(
         mode: .idle, glow: 0, color: nil, frontTag: nil, peerId: nil, peerName: nil,
@@ -60,8 +66,19 @@ struct BadgeState: Decodable {
     /// Recording needs both people's yes (California mode on either side).
     var needsConsent: Bool { consentRequired ?? californiaMode }
 
-    /// Recording may start on this phone.
-    var mayRecord: Bool { recordingAllowed ?? !needsConsent }
+    /// Recording may start on this phone (in a group, only on the one recording it).
+    var mayRecord: Bool { (recordingAllowed ?? !needsConsent) && (isRecorder ?? true) }
+
+    /// The others on the badge while together: the server's members, or the one peer.
+    var togetherMembers: [BadgeMember] {
+        if let members, !members.isEmpty { return members }
+        guard mode == .talking, let peerId else { return [] }
+        return [BadgeMember(id: peerId, name: peerName, avatarShape: peerAvatarShape, avatarColor: peerAvatarColor,
+                            matched: matched ?? true, color: color, joinedAt: 0)]
+    }
+
+    /// Three or more of us (me and at least two others).
+    var isGroup: Bool { group ?? ((members?.count ?? 0) >= 2) }
 
     init(mode: BadgeMode, glow: Double, color: String?, frontTag: String?, peerId: String?,
          peerName: String?, peerAvatarShape: String?, peerAvatarColor: String?, closeness: Double,
