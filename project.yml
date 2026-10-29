@@ -33,6 +33,9 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSNearbyInteractionUsageDescription: Your badge lights up when someone you should meet is close by.
+        # Bluetooth assist for UWB, only while the badge is worn full screen (no background mode:
+        # it stops with ranging when the badge is taken off or the app leaves the screen)
+        NSBluetoothAlwaysUsageDescription: While you wear your badge, Bluetooth tells it which badges are around, so it reacts sooner in a crowd. It sends only a short code that changes every 15 minutes, never your name.
         NSMicrophoneUsageDescription: Records conversations so your agent can send you a summary.
         NSSpeechRecognitionUsageDescription: Transcribes conversations on your phone for your summary.
         NSMotionUsageDescription: Your avatar notices when you walk, run or ride, and bounces along with you.
