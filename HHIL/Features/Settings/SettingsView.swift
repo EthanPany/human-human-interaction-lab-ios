@@ -60,9 +60,23 @@ struct SettingsView: View {
                 Text("Soft sounds and taps when you touch your avatar and when a match comes close. The silent switch also mutes the sounds.")
             }
 
+            // Contact sharing (ShareSettingsView.swift)
+            Section {
+                NavigationLink {
+                    ShareSettingsView()
+                } label: {
+                    LabeledContent("What I share", value: "\(env.sharing.items.count)")
+                }
+            } header: {
+                Text("Sharing")
+            } footer: {
+                Text("Links, handles and a QR code you can share with people you meet. Nothing is shared until you choose to.")
+            }
+
             NearbySection()
             LocationSection()
             DemoSection()
+            AboutSection()
 
             Section {
                 Button("Sign out", role: .destructive) { env.session.signOut() }
