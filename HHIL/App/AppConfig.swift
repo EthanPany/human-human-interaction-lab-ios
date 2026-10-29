@@ -1,60 +1,30 @@
 import Foundation
 
-/// Which server the app talks to. Both implement the same `Backend` API.
-enum BackendProvider: String, CaseIterable, Identifiable {
-    case convex
-    case spacetime
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .convex: return "Convex"
-        case .spacetime: return "SpacetimeDB"
-        }
-    }
-}
-
-extension Notification.Name {
-    /// Posted after the backend provider changes; the app rebuilds its environment.
-    static let backendProviderChanged = Notification.Name("backendProviderChanged")
-}
-
-/// App configuration. Both backends' addresses are fixed here (not user
-/// editable); Settings only switches between them.
+/// App configuration. The backend is SpacetimeDB (Maincloud); its address is
+/// fixed here, not user editable.
 enum AppConfig {
-    /// Convex cloud deployment (team ethan-pan, project human-human-interaction-lab).
-    static let convexURL = "https://small-porpoise-293.convex.cloud"
     /// SpacetimeDB Maincloud and the published module name (`spacetime publish hhil`).
     static let spacetimeHost = "https://maincloud.spacetimedb.com"
     static let spacetimeDatabase = "hhil"
 
-    // MARK: Provider
+    // MARK: One time migration
 
-    private static let providerKey = "backendProvider"
-
-    /// SpacetimeDB for everyone: Convex is switched off (free plan limit). The
-    /// Settings picker stays so Convex can come back by changing this line.
-    static let convexDisabled = true
-
-    /// The provider picked in Settings, SpacetimeDB by default.
-    static var backendProvider: BackendProvider {
-        if convexDisabled { return .spacetime }
-        return UserDefaults.standard.string(forKey: providerKey).flatMap(BackendProvider.init(rawValue:)) ?? .spacetime
-    }
+    /// Older builds could talk to Convex and saved the pick under this key.
+    private static let legacyProviderKey = "backendProvider"
+    /// Set once this phone has run a SpacetimeDB only build.
+    private static let spacetimeOnlyKey = "backend.spacetimeOnly"
 
     /// A phone last signed in on Convex holds a Convex user id, which SpacetimeDB
-    /// does not know: forget it once so the person signs in again there.
-    static func moveOffConvexIfNeeded() {
+    /// does not know: forget it once so the person signs in again. Phones that
+    /// were already on SpacetimeDB (saved provider "spacetime") stay signed in.
+    static func forgetConvexSignInOnce() {
         let defaults = UserDefaults.standard
-        guard convexDisabled, defaults.string(forKey: providerKey) != BackendProvider.spacetime.rawValue else { return }
-        defaults.removeObject(forKey: "userId")
-        defaults.set(BackendProvider.spacetime.rawValue, forKey: providerKey)
-    }
-
-    static func setBackendProvider(_ provider: BackendProvider) {
-        UserDefaults.standard.set(provider.rawValue, forKey: providerKey)
-        NotificationCenter.default.post(name: .backendProviderChanged, object: nil)
+        guard !defaults.bool(forKey: spacetimeOnlyKey) else { return }
+        if defaults.string(forKey: legacyProviderKey) != "spacetime" {
+            defaults.removeObject(forKey: "userId")
+        }
+        defaults.removeObject(forKey: legacyProviderKey)
+        defaults.set(true, forKey: spacetimeOnlyKey)
     }
 
     /// The agent's iMessage line on Photon (shared pool). Testers must be added

@@ -1,8 +1,8 @@
 import Foundation
 
 /// Everything the app needs from the server. Views and stores only talk to
-/// this protocol, so the Convex implementation can be swapped for the mock in
-/// previews or when no backend is configured.
+/// this protocol, so SpacetimeBackend can be swapped for the mock in previews
+/// and UI tests.
 protocol Backend: AnyObject {
     // Account
     func signIn(phone: String, name: String?, password: String?) async throws -> String
@@ -32,4 +32,14 @@ protocol Backend: AnyObject {
     func currentPerson(userId: String) -> AsyncThrowingStream<String?, Error>
     /// We met in person (the badge's meet moment): they join my People list.
     func markMet(userId: String, otherId: String) async throws
+
+    // Approximate location (Core/Location): gates heads up texts, expires on the server after 15 minutes
+    func reportLocation(userId: String, latitude: Double, longitude: Double, accuracy: Double) async throws
+    func clearLocation(userId: String) async throws
+}
+
+/// Only SpacetimeDB stores a coarse location; the others ignore it.
+extension Backend {
+    func reportLocation(userId: String, latitude: Double, longitude: Double, accuracy: Double) async throws {}
+    func clearLocation(userId: String) async throws {}
 }

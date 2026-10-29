@@ -1,6 +1,5 @@
 import Foundation
 import SwiftUI
-import ConvexMobile
 
 /// The signed in person's profile. Every field is optional because people can
 /// fill it by hand or let the text agent collect it over time.
@@ -84,7 +83,7 @@ struct Moment: Decodable, Identifiable {
     let id: String
     var caption: String?
     var url: String?
-    @ConvexFloat var at: Double
+    var at: Double
 
     var imageURL: URL? { url.flatMap(URL.init(string:)) }
     var date: Date { Date(timeIntervalSince1970: at / 1000) }

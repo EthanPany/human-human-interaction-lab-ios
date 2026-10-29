@@ -4,7 +4,6 @@ struct SettingsView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.openURL) private var openURL
     @Environment(\.theme) private var theme
-    @State private var provider = AppConfig.backendProvider
     @AppStorage(Feedback.soundsKey) private var sounds = true
     @AppStorage(Feedback.hapticsKey) private var haptics = true
     @AppStorage(Feedback.soundLevelKey) private var soundLevel = 1.0
@@ -60,18 +59,6 @@ struct SettingsView: View {
 
             NearbySection()
 
-            if !AppConfig.convexDisabled { Section {
-                Picker("Backend", selection: $provider) {
-                    ForEach(BackendProvider.allCases) { Text($0.displayName).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: provider) { _, new in switchBackend(to: new) }
-            } header: {
-                Text("Backend")
-            } footer: {
-                Text("Both run the same app. Each keeps its own accounts, so switching signs you out.")
-            } }
-
             Section {
                 Button("Sign out", role: .destructive) { env.session.signOut() }
             }
@@ -79,14 +66,6 @@ struct SettingsView: View {
         .scrollContentBackground(.hidden)
         .background(theme.background)
         .navigationTitle("Settings")
-    }
-
-    /// Accounts don't carry over between providers, so sign out first; the
-    /// app then rebuilds itself on the new backend (see HHILApp).
-    private func switchBackend(to new: BackendProvider) {
-        guard new != env.provider else { return }
-        env.session.signOut()
-        AppConfig.setBackendProvider(new)
     }
 
     /// A toggle bound to a profile flag that saves to the backend on change.

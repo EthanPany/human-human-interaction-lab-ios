@@ -1,5 +1,4 @@
 import Foundation
-import ConvexMobile
 
 /// A row in the People list: someone I saved, or met in person.
 struct PersonSummary: Decodable, Identifiable, Hashable {
@@ -13,7 +12,7 @@ struct PersonSummary: Decodable, Identifiable, Hashable {
     var avatarColor: String?
     var photoUrl: String?
     /// When they joined my list (saved, or first met).
-    @ConvexFloat var connectedAt: Double
+    var connectedAt: Double
     var lastSummary: String?
     /// False for people I met but haven't saved yet (nil from older servers).
     var saved: Bool? = nil
@@ -49,8 +48,8 @@ struct PersonProfile: Decodable {
 }
 
 struct ConversationInfo: Decodable {
-    @ConvexFloat var startedAt: Double
-    @OptionalConvexFloat var endedAt: Double?
+    var startedAt: Double
+    var endedAt: Double?
     var summary: String?
     var topics: [String]
     var followUp: String?
@@ -62,7 +61,7 @@ struct ConversationInfo: Decodable {
 struct TimelineItem: Decodable, Identifiable {
     var kind: String
     var text: String
-    @ConvexFloat var at: Double
+    var at: Double
 
     var id: String { "\(kind)-\(at)" }
     var date: Date { Date(timeIntervalSince1970: at / 1000) }
@@ -71,7 +70,7 @@ struct TimelineItem: Decodable, Identifiable {
 /// Everything the person detail screen shows.
 struct PersonDetail: Decodable {
     var person: PersonProfile
-    @OptionalConvexFloat var connectedAt: Double?
+    var connectedAt: Double?
     var conversation: ConversationInfo?
     var timeline: [TimelineItem]
     /// False when we met but I haven't saved their contact yet.

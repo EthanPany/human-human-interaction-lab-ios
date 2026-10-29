@@ -19,7 +19,7 @@ enum DemoReel {
     }
 }
 
-/// In memory backend for SwiftUI previews and for running without Convex.
+/// In memory backend for SwiftUI previews and UI tests.
 /// Live queries are real streams: edits made in the app show up right away.
 final class MockBackend: Backend {
     static let demoUserId = "me"

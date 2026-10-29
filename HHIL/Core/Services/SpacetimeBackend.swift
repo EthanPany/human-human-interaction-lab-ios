@@ -1,13 +1,23 @@
 import Foundation
 
+enum BackendError: LocalizedError {
+    case uploadFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .uploadFailed: return "The photo didn't upload. Try again."
+        }
+    }
+}
+
 /// Backend implementation on SpacetimeDB, over plain HTTP (there is no Swift SDK).
 ///
 /// The module in `spacetime/` of the parent repo exposes HTTP routes:
 ///   POST {host}/v1/database/{db}/route/rpc     {"path": "users:me", "args": {...}} -> {"value": ...}
 ///   POST {host}/v1/database/{db}/route/upload  JPEG bytes -> {"storageId": "..."}
-/// Function paths and JSON shapes match the Convex functions, so the same models
-/// decode both. Live queries become polling: each stream asks about once a second
-/// and only yields when the answer changed.
+/// Function paths are the module's (`users:me`, `badge:state`, ...; see
+/// spacetime/src/http.ts). Live queries are polling: each stream asks about
+/// once a second and only yields when the answer changed.
 final class SpacetimeBackend: Backend, @unchecked Sendable {
     private let routeBase: URL
     private let session: URLSession
@@ -136,6 +146,16 @@ final class SpacetimeBackend: Backend, @unchecked Sendable {
         try await send("people:met", ["userId": userId, "otherId": otherId])
     }
 
+    // MARK: Approximate location
+
+    func reportLocation(userId: String, latitude: Double, longitude: Double, accuracy: Double) async throws {
+        try await send("location:report", ["userId": userId, "lat": latitude, "lng": longitude, "accuracy": accuracy])
+    }
+
+    func clearLocation(userId: String) async throws {
+        try await send("location:clear", ["userId": userId])
+    }
+
     // MARK: Transport
 
     private struct Envelope<T: Decodable>: Decodable {
@@ -181,7 +201,7 @@ final class SpacetimeBackend: Backend, @unchecked Sendable {
     }
 
     /// Poll a query about once a second; yield only when the answer changes.
-    /// Bad arguments (4xx) end the stream like a failed Convex subscription;
+    /// Bad arguments (4xx) end the stream (the caller decides what to do);
     /// network trouble is retried with a short backoff.
     private func poll<T: Decodable>(_ path: String, _ args: [String: Any?], _ type: T.Type) -> AsyncThrowingStream<T, Error> {
         let request: Data

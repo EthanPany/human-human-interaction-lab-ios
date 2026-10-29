@@ -9,10 +9,6 @@ options:
 configFiles:
   Debug: Config/App.xcconfig
   Release: Config/App.xcconfig
-packages:
-  ConvexMobile:
-    url: https://github.com/get-convex/convex-swift
-    from: 0.7.0
 targets:
   HHIL:
     type: application
@@ -21,8 +17,6 @@ targets:
       - path: HHIL
         excludes:
           - "Resources/Fonts/*.txt"
-    dependencies:
-      - package: ConvexMobile
     scheme:
       testTargets:
         - HHILUITests
@@ -42,6 +36,7 @@ targets:
         NSMicrophoneUsageDescription: Records conversations so your agent can send you a summary.
         NSSpeechRecognitionUsageDescription: Transcribes conversations on your phone for your summary.
         NSMotionUsageDescription: Your avatar notices when you walk, run or ride, and bounces along with you.
+        NSLocationWhenInUseUsageDescription: Your agent texts you about someone worth meeting only when you are both at the same place. Only an approximate location is shared, while the app is open, and it is deleted after 15 minutes.
         LSApplicationQueriesSchemes: [sms]
         # Standard encryption only (HTTPS), so no export compliance documents
         ITSAppUsesNonExemptEncryption: false
@@ -64,7 +59,7 @@ targets:
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        # The Convex Rust library ships no Intel simulator slice
+        # Apple silicon simulators only (faster builds)
         "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
         # iPhone Duo hinge API (Platform/Fold.swift): the iOS 27.0 beta SDK
         # (27A5218g) has no hinge symbols yet, so HINGE_API stays off. Turn it on

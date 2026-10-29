@@ -1,5 +1,4 @@
 import Foundation
-import ConvexMobile
 
 enum BadgeMode: String, Decodable {
     case idle, match, talking, connected
@@ -8,7 +7,7 @@ enum BadgeMode: String, Decodable {
 /// Live badge state from `badge:state`. Drives glow, color and the front tag.
 struct BadgeState: Decodable {
     var mode: BadgeMode
-    @ConvexFloat var glow: Double
+    var glow: Double
     var color: String?
     var frontTag: String?
     /// 1 to 3 short topics printed big under my name (see backend badge.ts).
@@ -17,7 +16,7 @@ struct BadgeState: Decodable {
     var peerName: String?
     var peerAvatarShape: String?
     var peerAvatarColor: String?
-    @ConvexFloat var closeness: Double
+    var closeness: Double
     var conversationId: String?
     var recordConversations: Bool
     var californiaMode: Bool
@@ -36,7 +35,7 @@ struct BadgeState: Decodable {
          peerName: String?, peerAvatarShape: String?, peerAvatarColor: String?, closeness: Double,
          conversationId: String?, recordConversations: Bool, californiaMode: Bool, keywords: [String]? = nil) {
         self.mode = mode
-        self._glow = ConvexFloat(wrappedValue: glow)
+        self.glow = glow
         self.color = color
         self.frontTag = frontTag
         self.keywords = keywords
@@ -44,7 +43,7 @@ struct BadgeState: Decodable {
         self.peerName = peerName
         self.peerAvatarShape = peerAvatarShape
         self.peerAvatarColor = peerAvatarColor
-        self._closeness = ConvexFloat(wrappedValue: closeness)
+        self.closeness = closeness
         self.conversationId = conversationId
         self.recordConversations = recordConversations
         self.californiaMode = californiaMode
