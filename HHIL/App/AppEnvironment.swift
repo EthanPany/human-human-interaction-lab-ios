@@ -27,8 +27,10 @@ final class AppEnvironment {
         nearby = NearbyService(backend: backend)
         location = LocationReporter(backend: backend)
         let badgeStore = badge
-        nearby.onDistance = { [weak badgeStore] peerId, meters in
-            badgeStore?.nearbyDistance(peerId: peerId, meters: meters)
+        let nearbyService = nearby
+        nearby.onDistance = { [weak badgeStore, weak nearbyService] peerId, meters in
+            let range = nearbyService?.maxRange(for: peerId) ?? BadgeStore.standardRange
+            badgeStore?.nearbyDistance(peerId: peerId, meters: meters, maxRange: range)
         }
     }
 

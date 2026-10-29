@@ -26,12 +26,17 @@ struct UserProfile: Decodable, Identifiable {
     var agentLine: String? = nil
     /// False until they've texted the agent once (a shared line can't text first).
     var agentConnected: Bool? = nil
+    /// Where my badge starts responding, meters (Settings > Nearby). Nil: the maximum.
+    var respondFromM: Double? = nil
+    /// Encounters under a minute leave no record (Settings > Recording). Nil: on.
+    var dropShortEncounters: Bool? = nil
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
         case phone, name, headline, company, location, tags, lookingFor, offers, hobbies, appearance
         case californiaMode, recordConversations, hasPassword
         case avatarShape, avatarColor, badgeLayout, photoUrl, agentLine, agentConnected
+        case respondFromM, dropShortEncounters
     }
 
     var displayName: String { name?.isEmpty == false ? name! : "Your name" }
@@ -105,4 +110,6 @@ struct ProfilePatch {
     var avatarShape: String?
     var avatarColor: String?
     var badgeLayout: String?
+    var respondFromM: Double?
+    var dropShortEncounters: Bool?
 }

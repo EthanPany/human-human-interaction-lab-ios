@@ -114,9 +114,10 @@ struct BadgeTabView: View {
             return "You found \(name)! Say hi."
         case .match: return "\(name) is nearby. Your avatar is taking on your shared color."
         case .talking:
-            return env.badge.recordingStartedAt == nil
-                ? "You're talking with \(name)."
-                : "You're talking with \(name). Recording for your summary."
+            if env.badge.recordingStartedAt != nil { return "You're talking with \(name). Recording for your summary." }
+            if env.badge.waitingForPeerConsent { return "You're talking with \(name). Recording starts when they agree too." }
+            if env.badge.peerDeclinedRecording { return "You're talking with \(name). They'd rather not record." }
+            return "You're talking with \(name)."
         case .connected: return "\(name) is in your People. Say hi again!"
         }
     }

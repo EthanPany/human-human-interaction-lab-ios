@@ -32,6 +32,9 @@ struct BadgeConfiguration {
     /// The tag the nearby match cares about most. Nil when nobody is close.
     var frontTag: String?
     var mode: BadgeMode
+    /// The peer is a match. Someone who is not still joins the avatars when
+    /// we're together, but the badge shows no tint or glow for them.
+    var matched = true
     /// 0...1 from distance alone (1 = talking distance).
     var closeness: Double
     /// Shared match color (same on both badges), nil when idle.
@@ -67,7 +70,7 @@ struct BadgeConfiguration {
     /// The two colors the badge blends as a match gets closer: mine and theirs
     /// (or the shared match color when we don't know theirs). Nil when idle.
     var pairColors: (mine: Color, theirs: Color)? {
-        guard mode != .idle, let theirs = peerAvatar?.color ?? matchColor else { return nil }
+        guard mode != .idle, matched, let theirs = peerAvatar?.color ?? matchColor else { return nil }
         return (avatar.color, theirs)
     }
 

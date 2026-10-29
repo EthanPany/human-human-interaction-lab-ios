@@ -69,6 +69,8 @@ final class SpacetimeBackend: Backend, @unchecked Sendable {
             "appearance": patch.appearance,
             "californiaMode": patch.californiaMode,
             "recordConversations": patch.recordConversations,
+            "respondFromM": patch.respondFromM,
+            "dropShortEncounters": patch.dropShortEncounters,
         ]
         try await send("users:updateProfile", ["userId": userId, "patch": compact(fields)])
     }
@@ -116,8 +118,8 @@ final class SpacetimeBackend: Backend, @unchecked Sendable {
         try await send("nearby:uploadToken", ["userId": userId, "peerId": peerId, "token": token])
     }
 
-    func reportDistance(userId: String, peerId: String, meters: Double) async throws {
-        try await send("nearby:reportDistance", ["userId": userId, "peerId": peerId, "meters": meters])
+    func reportDistance(userId: String, peerId: String, meters: Double, extended: Bool) async throws {
+        try await send("nearby:reportDistance", ["userId": userId, "peerId": peerId, "meters": meters, "extended": extended])
     }
 
     func setRanging(userId: String, on: Bool) async throws {
@@ -126,6 +128,10 @@ final class SpacetimeBackend: Backend, @unchecked Sendable {
 
     func finishConversation(id: String, transcript: String?) async throws {
         try await send("conversations:finish", ["conversationId": id, "transcript": transcript])
+    }
+
+    func setRecordingConsent(userId: String, conversationId: String, agree: Bool) async throws {
+        try await send("conversations:consent", ["userId": userId, "conversationId": conversationId, "agree": agree])
     }
 
     // MARK: People

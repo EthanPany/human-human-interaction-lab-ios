@@ -90,8 +90,12 @@ struct Theme {
     var shadowY: CGFloat = 1.5
 
     /// Both people's colors flowing over the badge background: this opacity
-    /// when a match is first sensed (10 m), rising to the upper bound by 3 m.
-    var matchWashOpacity: ClosedRange<Double> = 0.12...0.72
+    /// at the pair's respond range, rising in a straight line to the upper
+    /// bound at 1 m (matches only).
+    var matchWashOpacity: ClosedRange<Double> = 0.06...0.85
+    /// How quickly the tint (wash, glow, card) catches up with a new distance
+    /// reading, seconds. Short, so every step closer shows.
+    var matchTintResponse: Double = 0.25
     /// How fast that two color blend drifts across the badge (radians per second).
     var pairWashSpeed: Double = 0.35
     /// How much of the match color the white identity card takes on at talking distance.

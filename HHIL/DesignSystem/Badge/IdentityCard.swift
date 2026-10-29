@@ -35,7 +35,7 @@ struct IdentityCard: View {
             }
         }
         .frame(maxWidth: .infinity, minHeight: minHeight)
-        .animation(.easeInOut(duration: 0.8), value: c.tintStrength)
+        .animation(.easeOut(duration: theme.matchTintResponse), value: c.tintStrength)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { cardWidth = $0 }
         .clipShape(shape)
     }

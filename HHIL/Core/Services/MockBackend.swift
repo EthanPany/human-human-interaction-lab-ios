@@ -76,6 +76,8 @@ final class MockBackend: Backend {
         if let v = patch.avatarShape { profile.avatarShape = v }
         if let v = patch.avatarColor { profile.avatarColor = v }
         if let v = patch.badgeLayout { profile.badgeLayout = v }
+        if let v = patch.respondFromM { profile.respondFromM = v }
+        if let v = patch.dropShortEncounters { profile.dropShortEncounters = v }
         profileWatchers.values.forEach { $0.yield(profile) }
     }
 
@@ -145,15 +147,25 @@ final class MockBackend: Backend {
 
     func peers(userId: String) -> AsyncThrowingStream<[Peer], Error> { once([]) }
     func uploadToken(userId: String, peerId: String, token: String) async throws {}
-    func reportDistance(userId: String, peerId: String, meters: Double) async throws {}
+    func reportDistance(userId: String, peerId: String, meters: Double, extended: Bool) async throws {}
     func setRanging(userId: String, on: Bool) async throws {}
     func finishConversation(id: String, transcript: String?) async throws {}
+    func setRecordingConsent(userId: String, conversationId: String, agree: Bool) async throws {}
 
     func people(userId: String) -> AsyncThrowingStream<[PersonSummary], Error> { once(Self.allPeople) }
 
     func personDetail(userId: String, otherId: String) -> AsyncThrowingStream<PersonDetail?, Error> {
         guard let p = Self.allPeople.first(where: { $0.id == otherId }) else { return once(nil) }
         let met = p.connectedAt
+        // Two separate encounters: today and an earlier one (more than 5 minutes apart)
+        let encounters = [
+            Encounter(id: "\(p.id)-2", startedAt: met - 6 * 60_000, endedAt: met, durationMs: 6 * 60_000, matched: true,
+                      summary: p.lastSummary, topics: ["Design systems", "Hiring", "Hackathons"],
+                      followUp: "Hey \(p.name ?? "there"), great talking at Cal Hacks! Want to grab coffee next week?"),
+            Encounter(id: "\(p.id)-1", startedAt: met - 70 * 60_000, endedAt: met - 67 * 60_000, durationMs: 3 * 60_000,
+                      matched: true, summary: "Quick hello at the badge table; you both wanted to see the robot demos.",
+                      topics: ["Robot demos"], followUp: nil),
+        ]
         let detail = PersonDetail(
             person: PersonProfile(
                 id: p.id, name: p.name, headline: p.headline, company: p.company, location: p.location,
@@ -166,8 +178,11 @@ final class MockBackend: Backend {
                 topics: ["Design systems", "Hiring", "Hackathons"],
                 followUp: "Hey \(p.name ?? "there"), great talking at Cal Hacks! Want to grab coffee next week?"
             ),
+            encounters: encounters,
             timeline: [
-                TimelineItem(kind: "met", text: "Met at Cal Hacks", at: met - 6 * 60_000),
+                TimelineItem(kind: "met", text: "Met at Cal Hacks", at: met - 70 * 60_000),
+                TimelineItem(kind: "talked", text: "Talked for 3 min", at: met - 70 * 60_000),
+                TimelineItem(kind: "talked", text: "Talked for 6 min", at: met - 6 * 60_000),
                 TimelineItem(kind: "saved", text: "Saved to People", at: met),
             ]
         )

@@ -23,8 +23,13 @@ final class BadgeStore {
     var isPreviewVisible = false {
         didSet { cues.isPreviewVisible = isPreviewVisible }
     }
-    /// Set while California mode waits for the user to approve a recording.
+    /// Set while California mode waits for this person's answer about recording.
     var pendingConsentConversationId: String?
+
+    /// 0...1 how close the current match is, from this phone's own UWB reading
+    /// when it has a fresh one (every reading, no server round trip), else the
+    /// server's. 0 at the pair's respond range, 1 at talking distance.
+    private(set) var closeness: Double = 0
 
     /// Goes up by one at each "we finally met" moment (the avatars jump to each other).
     private(set) var meetCount = 0
@@ -55,12 +60,36 @@ final class BadgeStore {
     /// Readings in a row on the near (or far) side, per peer, and since when.
     private var streak: (peerId: String, near: Bool, count: Int, since: Date)?
     private var takeOffTask: Task<Void, Never>?
+    /// This phone's latest reading of the current peer: meters, its range, when.
+    private var localReading: (peerId: String, meters: Double, maxRange: Double, at: Date)?
+    /// Conversations this person already answered the recording question for.
+    private var consentAnswered: Set<String> = []
 
-    /// Same as TALK_DISTANCE_M in backend/convex/lib/constants.ts. Checked on
-    /// every local UWB reading, so the moment fires without waiting for the server.
-    static let meetDistance = 2.0
-    /// Further than this, we have parted (same as TALK_EXIT_DISTANCE_M).
-    static let apartDistance = 3.0
+    // Distance rules: the same numbers as spacetime/src/lib/constants.ts in
+    // the parent repo (the server's talking state uses them too).
+
+    /// A badge reacts from the maximum ranging range: standard UWB senses about
+    /// 9 m (STANDARD_RANGE_M), extended UWB about 50 m (EXTENDED_RANGE_M).
+    static let standardRange = 9.0
+    static let extendedRange = 50.0
+    /// The lowest "Respond from" in Settings > Nearby (MIN_RESPOND_FROM_M).
+    static let minRespondFrom = 2.0
+    /// Together at this distance or closer (TALK_DISTANCE_M). Checked on every
+    /// local UWB reading, so the moment fires without waiting for the server.
+    static let meetDistance = 1.0
+    /// Once together, apart only further than this (TALK_EXIT_DISTANCE_M).
+    static let apartDistance = 1.5
+    /// Back together within this long continues the same encounter (REJOIN_WINDOW_MS).
+    static let rejoinWindow: TimeInterval = 5 * 60
+    /// "Drop short encounters" threshold (MIN_ENCOUNTER_MS).
+    static let minEncounter: TimeInterval = 60
+
+    /// 0 at the respond range, 1 at talking distance, straight line in between
+    /// (closenessAt on the server).
+    static func closeness(meters: Double, range: Double) -> Double {
+        let span = max(0.1, range - meetDistance)
+        return max(0, min(1, (range - meters) / span))
+    }
     /// UWB readings jump around: this many readings in a row, over at least
     /// this long, confirm we came together (or parted). About half a second.
     static let confirmReadings = 3
@@ -68,8 +97,9 @@ final class BadgeStore {
     /// Taking the badge off stops the recording after this long (an accidental
     /// swipe out and straight back in keeps it going).
     static let takeOffGrace: Duration = .seconds(2)
-    /// Apart at least this long before meeting the same person counts again.
-    static let meetAgainAfter: TimeInterval = 20
+    /// Apart at least this long before meeting the same person counts again
+    /// (the meet moment plays again); sooner is the same encounter.
+    static let meetAgainAfter: TimeInterval = rejoinWindow
     /// Out of the talking state this long before the conversation really ends.
     static let leaveGrace: Duration = .seconds(6)
 
@@ -97,6 +127,9 @@ final class BadgeStore {
         state = .idle
         cues.reset()
         pendingConsentConversationId = nil
+        consentAnswered = []
+        localReading = nil
+        closeness = 0
         metPeerId = nil
         togetherWith = nil
         leaveTask?.cancel()
@@ -112,21 +145,45 @@ final class BadgeStore {
 
     // MARK: Recording consent (California mode)
 
-    func approveRecording() {
-        guard pendingConsentConversationId != nil else { return }
+    /// Recording starts once the other person said yes too (the server tells us).
+    func approveRecording() { answerConsent(true) }
+
+    func declineRecording() { answerConsent(false) }
+
+    private func answerConsent(_ agree: Bool) {
+        guard let id = pendingConsentConversationId else { return }
         pendingConsentConversationId = nil
-        startRecording()
+        consentAnswered.insert(id)
+        guard let userId else { return }
+        Task { [backend] in
+            do {
+                try await backend.setRecordingConsent(userId: userId, conversationId: id, agree: agree)
+            } catch {
+                print("recording consent failed:", error)
+            }
+        }
     }
 
-    func declineRecording() {
-        pendingConsentConversationId = nil
+    /// I said yes and wait for the other person (California mode on either side).
+    var waitingForPeerConsent: Bool {
+        state.mode == .talking && state.needsConsent && state.myConsent == true && state.peerConsent == nil
+    }
+
+    /// The other person said no to recording.
+    var peerDeclinedRecording: Bool {
+        state.mode == .talking && state.needsConsent && state.peerConsent == false
     }
 
     // MARK: Meeting
 
-    /// This phone's smoothed UWB distance to a peer (NearbyService, a few times a second).
-    func nearbyDistance(peerId: String, meters: Double) {
+    /// This phone's smoothed UWB distance to a peer (NearbyService, a few times
+    /// a second), and how far this phone can sense that peer (9 or 50 m).
+    func nearbyDistance(peerId: String, meters: Double, maxRange: Double) {
         let now = Date()
+        if peerId == state.peerId {
+            localReading = (peerId, meters, maxRange, now)
+            updateCloseness()
+        }
         // Which side of the line is this reading on? Between the two distances
         // keeps whatever we were (no flicker right at the threshold).
         let near: Bool? = meters <= Self.meetDistance ? true : (meters > Self.apartDistance ? false : nil)
@@ -150,6 +207,21 @@ final class BadgeStore {
         meet(peerId)
     }
 
+    /// The tint, glow and heartbeat follow every reading: from the pair's respond
+    /// range (the smaller "Respond from", never past what UWB senses) down to 1 m.
+    private func updateCloseness() {
+        var value = state.closeness
+        if state.mode == .talking {
+            value = 1
+        } else if let r = localReading, r.peerId == state.peerId, Date().timeIntervalSince(r.at) < 2,
+                  state.mode == .match || state.mode == .connected {
+            let range = min(state.respondRangeM ?? r.maxRange, r.maxRange)
+            value = Self.closeness(meters: r.meters, range: range)
+        }
+        if abs(value - closeness) > 0.004 || (value == 0) != (closeness == 0) { closeness = value }
+        cues.approach(closeness: closeness)
+    }
+
     /// The "we finally met" moment, once per meeting: the first time we come
     /// within talking distance, or again after being apart for a while.
     private func meet(_ peerId: String) {
@@ -169,7 +241,8 @@ final class BadgeStore {
             try? await Task.sleep(for: .seconds(0.5))
             self.cues.met()
         }
-        if let userId {
+        // A match joins my People now; anyone else once the encounter is kept.
+        if let userId, state.isMatch {
             Task { [backend] in
                 do {
                     try await backend.markMet(userId: userId, otherId: peerId)
@@ -185,6 +258,8 @@ final class BadgeStore {
     private func apply(_ new: BadgeState) async {
         state = new
         cues.update(new)
+        if localReading?.peerId != new.peerId { localReading = nil }
+        updateCloseness()
 
         // Someone else is the match now, or nobody: we're not standing together anymore.
         if let together = togetherWith, together != new.peerId {
@@ -203,10 +278,8 @@ final class BadgeStore {
             } else {
                 if let old = activeConversationId { await leave(old) }
                 activeConversationId = id
-                if new.recordConversations {
-                    if new.californiaMode { pendingConsentConversationId = id } else { startRecording() }
-                }
             }
+            updateRecording(new)
         }
 
         // Left the conversation: after a short grace, stop, upload what we have, trigger follow ups
@@ -217,6 +290,18 @@ final class BadgeStore {
                 await self.leave(id)
             }
         }
+    }
+
+    /// Record when this person records conversations and, if either of us has
+    /// California mode on, once both said yes (asked once per encounter; coming
+    /// back within 5 minutes keeps the answers and appends to the recording).
+    private func updateRecording(_ s: BadgeState) {
+        guard let id = activeConversationId, id == s.conversationId, s.recordConversations else { return }
+        if s.needsConsent, s.myConsent == nil, !consentAnswered.contains(id) {
+            pendingConsentConversationId = id
+        }
+        guard s.mayRecord, recordingTask == nil else { return }
+        startRecording()
     }
 
     /// Badge put on or taken off. Off for longer than the grace ends the conversation here.

@@ -1,7 +1,8 @@
 import SwiftUI
 
 extension View {
-    /// California mode: ask before recording a conversation. Attached to the
+    /// California mode (two party consent): when either person has it on, both
+    /// phones ask, and recording starts only once both said yes. Attached to the
     /// tabs and to the worn badge (an alert can't show under a full screen cover),
     /// so the prompt appears wherever the person is.
     func recordingConsent(isActive: Bool = true) -> some View {
@@ -24,7 +25,7 @@ private struct RecordingConsentAlert: ViewModifier {
             Button("Not now", role: .cancel) { env.badge.declineRecording() }
             Button("Record") { env.badge.approveRecording() }
         } message: {
-            Text("California mode is on. Make sure \(env.badge.state.peerName ?? "the other person") agrees before you record.")
+            Text("California mode is on for one of you. \(env.badge.state.peerName ?? "The other person") is asked too; recording starts only when you both agree.")
         }
     }
 }

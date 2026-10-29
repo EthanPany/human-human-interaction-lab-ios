@@ -21,10 +21,13 @@ protocol Backend: AnyObject {
     func badgeState(userId: String) -> AsyncThrowingStream<BadgeState, Error>
     func peers(userId: String) -> AsyncThrowingStream<[Peer], Error>
     func uploadToken(userId: String, peerId: String, token: String) async throws
-    func reportDistance(userId: String, peerId: String, meters: Double) async throws
+    /// `extended`: this pair's session runs extended UWB (about 50 m instead of 9 m).
+    func reportDistance(userId: String, peerId: String, meters: Double, extended: Bool) async throws
     /// The badge is worn full screen (UWB on) or not; off drops my distances at once.
     func setRanging(userId: String, on: Bool) async throws
     func finishConversation(id: String, transcript: String?) async throws
+    /// California mode: my answer to "record this conversation?" (recording needs both yeses).
+    func setRecordingConsent(userId: String, conversationId: String, agree: Bool) async throws
 
     // People (CRM)
     func people(userId: String) -> AsyncThrowingStream<[PersonSummary], Error>

@@ -54,7 +54,7 @@ private struct PlayfulBadge: View {
     private func keywords(scale: CGFloat, size: CGFloat, shape: AnyShape) -> some View {
         KeywordsCard(
             keywords: c.keywords.isEmpty ? ["Tell your agent what you're into"] : c.keywords,
-            matched: c.mode != .idle,
+            matched: c.mode != .idle && c.matched,
             tint: c.matchColor,
             scale: scale,
             fontSize: c.keywords.isEmpty ? size * 0.6 : size,
@@ -65,7 +65,7 @@ private struct PlayfulBadge: View {
 
 /// Both people's avatar colors flowing over the background as one slow
 /// current: bands of my color and theirs drift diagonally across the badge and
-/// bleed into each other. Faint when a match is first sensed, strong by 3 m.
+/// bleed into each other. Faint at the pair's respond range, strong at 1 m.
 private struct PairWash: View {
     var colors: (mine: Color, theirs: Color)?
     var strength: Double
@@ -83,7 +83,7 @@ private struct PairWash: View {
             }
         }
         .opacity(opacity)
-        .animation(.easeInOut(duration: 0.8), value: opacity)
+        .animation(.easeOut(duration: theme.matchTintResponse), value: opacity)
         .allowsHitTesting(false)
         .ignoresSafeArea()
         .accessibilityHidden(true)
@@ -122,13 +122,14 @@ private struct PairWash: View {
 private struct MatchGlow: View {
     var color: Color?
     var intensity: Double
+    @Environment(\.theme) private var theme
 
     var body: some View {
         Rectangle()
             .strokeBorder((color ?? .clear).opacity(0.9 * intensity), lineWidth: 10 + 40 * intensity)
             .blur(radius: 18 + 30 * intensity)
             .allowsHitTesting(false)
-            .animation(.easeInOut(duration: 0.8), value: intensity)
+            .animation(.easeOut(duration: theme.matchTintResponse), value: intensity)
             .ignoresSafeArea()
     }
 }

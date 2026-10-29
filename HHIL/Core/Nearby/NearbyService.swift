@@ -14,6 +14,12 @@ import Observation
 /// and sent to the backend about twice a second per peer (sooner when they
 /// change a lot); the server turns them into badge state.
 ///
+/// A phone runs only a few NISessions well at once, so we range with the first
+/// `maxSessions` peers in the server's order: the person I'm with, then
+/// matches, then everyone else, most recently near first. Non matches are
+/// ranged too: anyone within 1 m starts an encounter (no tint, but the avatars
+/// join and recording can start).
+///
 /// Everything it does is visible in `diagnostics` (Settings > Nearby).
 @MainActor
 @Observable
@@ -28,6 +34,9 @@ final class NearbyService: NSObject {
         var name: String
         var tokenSent = false
         var running = false
+        var isMatch = false
+        /// This session runs extended UWB (about 50 m).
+        var extended = false
         var meters: Double?
         var updatedAt: Date?
         var lastError: String?
@@ -50,6 +59,10 @@ final class NearbyService: NSObject {
 
     private(set) var status: Status = .idle
     private(set) var diagnostics: [String: PeerDiagnostics] = [:]
+    /// Badge wearers left out because every UWB slot is taken.
+    private(set) var waitingForSlot = 0
+    /// At most this many UWB sessions at once (the highest priority peers).
+    static let maxSessions = 8
     var extendedRange: Bool { Self.supportsExtendedRange }
     /// Every smoothed reading (peer id, meters), for the badge's meet moment.
     @ObservationIgnored var onDistance: (@MainActor (String, Double) -> Void)?
@@ -59,6 +72,7 @@ final class NearbyService: NSObject {
     @ObservationIgnored private var peersTask: Task<Void, Never>?
     @ObservationIgnored private var sessions: [String: NISession] = [:] // peerId -> session
     @ObservationIgnored private var runningWith: [String: String] = [:] // peerId -> peer token we run with
+    @ObservationIgnored private var extendedPeers: Set<String> = []
     @ObservationIgnored private var lastReport: [String: (at: Date, meters: Double)] = [:]
     @ObservationIgnored private var smoothed: [String: Double] = [:]
     @ObservationIgnored private var lastPeers: [Peer] = []
@@ -77,6 +91,16 @@ final class NearbyService: NSObject {
     /// Settings > Nearby switch: request extended range (both phones must be iPhone 15 or later).
     static let extendedRangeKey = "nearby.extendedRange"
     static var extendedRangeEnabled: Bool { UserDefaults.standard.bool(forKey: extendedRangeKey) }
+
+    /// How far this phone can sense the peer: about 9 m, 50 m with extended UWB.
+    func maxRange(for peerId: String) -> Double {
+        extendedPeers.contains(peerId) ? BadgeStore.extendedRange : BadgeStore.standardRange
+    }
+
+    /// The furthest "Respond from" makes sense on this phone (Settings > Nearby).
+    static var maxRespondRange: Double {
+        supportsExtendedRange && extendedRangeEnabled ? BadgeStore.extendedRange : BadgeStore.standardRange
+    }
 
     /// Second generation UWB (iPhone 15 and later) can range further.
     static var supportsExtendedRange: Bool {
@@ -143,6 +167,8 @@ final class NearbyService: NSObject {
         sessions.values.forEach { $0.invalidate() }
         sessions.removeAll()
         runningWith.removeAll()
+        extendedPeers.removeAll()
+        waitingForSlot = 0
         directions.removeAll()
         diagnostics.removeAll()
         smoothed.removeAll()
@@ -161,20 +187,26 @@ final class NearbyService: NSObject {
     private func sync(_ peers: [Peer]) {
         guard let userId, active, status != .permissionDenied else { return }
         lastPeers = peers
-        let ids = Set(peers.map(\.userId))
+        // The server sends peers most important first; range with the first few.
+        let chosen = Array(peers.prefix(Self.maxSessions))
+        waitingForSlot = peers.count - chosen.count
+        let ids = Set(chosen.map(\.userId))
 
-        // Drop sessions for people who left
+        // Drop sessions for people who left (or lost their slot)
         for (peerId, session) in sessions where !ids.contains(peerId) {
             session.invalidate()
             sessions[peerId] = nil
             runningWith[peerId] = nil
+            extendedPeers.remove(peerId)
             diagnostics[peerId] = nil
             smoothed[peerId] = nil
+            directions[peerId] = nil
         }
 
-        for peer in peers {
+        for peer in chosen {
             var diag = diagnostics[peer.userId] ?? PeerDiagnostics(id: peer.userId, name: peer.name)
             diag.name = peer.name
+            diag.isMatch = peer.isMatch ?? true
             let session = sessions[peer.userId] ?? makeSession(for: peer.userId, userId: userId, diag: &diag)
             if let encoded = peer.tokenForMe, runningWith[peer.userId] != encoded {
                 if let token = Self.decode(encoded) {
@@ -182,14 +214,18 @@ final class NearbyService: NSObject {
                     // Extended range only works when BOTH phones have the U2 chip
                     // (iPhone 15 and later); asking for it with an older peer
                     // (e.g. iPhone 14, U1) gives no readings at all. Standard
-                    // range (~9 m) already covers our 8 m glow, so it is off
-                    // unless turned on in Settings > Nearby.
+                    // range (~9 m) is the default; extended is off unless
+                    // turned on in Settings > Nearby.
                     // The peer's token says whether its chip supports it, so a
                     // mixed pair falls back to standard range instead of going silent.
+                    var extended = false
                     if #available(iOS 17.0, *), Self.supportsExtendedRange, Self.extendedRangeEnabled,
                        token.deviceCapabilities.supportsExtendedDistanceMeasurement {
                         config.isExtendedDistanceMeasurementEnabled = true
+                        extended = true
                     }
+                    if extended { extendedPeers.insert(peer.userId) } else { extendedPeers.remove(peer.userId) }
+                    diag.extended = extended
                     session.run(config)
                     runningWith[peer.userId] = encoded
                     diag.running = true
@@ -232,10 +268,11 @@ final class NearbyService: NSObject {
             let x = Double(max(-1, min(1, direction.x)))
             if abs((directions[peerId] ?? 0) - x) > 0.05 { directions[peerId] = x }
         }
-        // Light smoothing: UWB readings jitter by 10 to 30 cm. Big jumps (walking
-        // up fast) follow quickly so "together" shows the moment it happens.
+        // Light smoothing: UWB readings jitter by 10 to 30 cm. Kept light so the
+        // tint follows every step; big jumps (walking up fast) follow almost at
+        // once so "together" shows the moment it happens.
         let raw = Double(distance)
-        let value = smoothed[peerId].map { abs(raw - $0) > 1 ? $0 * 0.3 + raw * 0.7 : $0 * 0.6 + raw * 0.4 } ?? raw
+        let value = smoothed[peerId].map { abs(raw - $0) > 0.6 ? $0 * 0.15 + raw * 0.85 : $0 * 0.4 + raw * 0.6 } ?? raw
         smoothed[peerId] = value
         diagnostics[peerId]?.meters = value
         diagnostics[peerId]?.updatedAt = Date()
@@ -245,11 +282,12 @@ final class NearbyService: NSObject {
         let now = Date()
         if let last = lastReport[peerId],
            now.timeIntervalSince(last.at) < 0.25,
-           abs(last.meters - value) < 0.3 { return }
+           abs(last.meters - value) < 0.15 { return }
         lastReport[peerId] = (now, value)
+        let extended = extendedPeers.contains(peerId)
         Task { [backend] in
             do {
-                try await backend.reportDistance(userId: userId, peerId: peerId, meters: value)
+                try await backend.reportDistance(userId: userId, peerId: peerId, meters: value, extended: extended)
             } catch {
                 self.diagnostics[peerId]?.lastError = "Report failed: \(error.localizedDescription)"
             }
@@ -275,6 +313,7 @@ final class NearbyService: NSObject {
         session.invalidate()
         sessions[peerId] = nil
         runningWith[peerId] = nil
+        extendedPeers.remove(peerId)
         directions[peerId] = nil
         diagnostics[peerId]?.running = false
 

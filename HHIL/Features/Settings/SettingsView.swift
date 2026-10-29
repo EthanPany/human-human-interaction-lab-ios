@@ -26,10 +26,13 @@ struct SettingsView: View {
                 Toggle("California mode", isOn: binding(\.californiaMode, default: false) {
                     ProfilePatch(californiaMode: $0)
                 })
+                Toggle("Drop short encounters", isOn: binding(\.dropShortEncounters, default: true) {
+                    ProfilePatch(dropShortEncounters: $0)
+                })
             } header: {
                 Text("Recording")
             } footer: {
-                Text("Recordings are transcribed on your phone for your summary. California mode asks before each recording.")
+                Text("Recordings are transcribed on your phone for your summary. With California mode on for either of you, both phones ask first and recording starts only when you both agree. Drop short encounters: anything under a minute leaves no record, summary or text.")
             }
 
             Section {
@@ -92,6 +95,8 @@ private struct NearbySection: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.theme) private var theme
     @AppStorage(NearbyService.extendedRangeKey) private var extended = false
+    /// The slider while it moves (saved when let go).
+    @State private var respondDraft: Double?
 
     var body: some View {
         let nearby = env.nearby
@@ -102,6 +107,12 @@ private struct NearbySection: View {
                     .onChange(of: extended) { _, _ in nearby.reset() }
             } else {
                 LabeledContent("Range", value: "Standard UWB")
+            }
+            respondFrom
+            if nearby.waitingForSlot > 0 {
+                Text("\(nearby.waitingForSlot) more badges are around. Ranging stays with the \(NearbyService.maxSessions) most important (matches first).")
+                    .font(theme.caption)
+                    .foregroundStyle(theme.inkSecondary)
             }
             if nearby.diagnostics.isEmpty {
                 Text("No other badges worn right now. Ranging runs only while badges are worn full screen, on both phones, signed in as different people.")
@@ -126,7 +137,37 @@ private struct NearbySection: View {
         } header: {
             Text("Nearby (UWB)")
         } footer: {
-            Text("A match starts to show within 8 m and you are together within 2 m (confirmed over about half a second). Ranging runs only while the badge is worn full screen; taking it off or leaving the app stops it on both phones at once. Extended range works only when both phones are iPhone 15 or later.")
+            Text("Respond from sets where your badge starts reacting to a match (glow, tint and the heartbeat), up to the most UWB can sense: about 9 m, or 50 m with extended range. With two badges, the smaller setting counts for both. You are together within 1 m (apart again past 1.5 m); anyone together with you for a moment starts an encounter, match or not, but only matches get the tint. Ranging runs only while the badge is worn full screen; taking it off or leaving the app stops it on both phones at once. Extended range works only when both phones are iPhone 15 or later.")
+        }
+    }
+
+    /// "Respond from": 2 m up to this phone's maximum. The top of the slider
+    /// means the maximum (saved as 50 m, so turning on extended range later
+    /// widens it too); the server caps each pair at what their UWB can sense.
+    private var respondFrom: some View {
+        let top = NearbyService.maxRespondRange
+        let saved = env.session.profile?.respondFromM ?? BadgeStore.extendedRange
+        let value = min(top, max(BadgeStore.minRespondFrom, respondDraft ?? saved))
+        return VStack(alignment: .leading, spacing: 6) {
+            LabeledContent("Respond from") {
+                Text(value >= top ? "Max, about \(Int(top)) m" : String(format: "%.1f m", value))
+                    .font(theme.body.monospacedDigit())
+            }
+            Slider(
+                value: Binding(get: { value }, set: { respondDraft = $0 }),
+                in: BadgeStore.minRespondFrom...top,
+                step: 0.5,
+                onEditingChanged: { editing in
+                    guard !editing, let draft = respondDraft else { return }
+                    let stored = draft >= top ? BadgeStore.extendedRange : draft
+                    Feedback.shared.play(.buttonPress)
+                    Task { @MainActor in
+                        await env.session.update(ProfilePatch(respondFromM: stored))
+                        respondDraft = nil
+                    }
+                }
+            )
+            .accessibilityLabel("Respond from")
         }
     }
 
@@ -134,6 +175,8 @@ private struct NearbySection: View {
         var parts: [String] = []
         parts.append(p.tokenSent ? "token sent" : "no token sent")
         parts.append(p.running ? "ranging" : "waiting for their token")
+        parts.append(p.isMatch ? "match" : "not a match")
+        if p.extended { parts.append("extended") }
         if let at = p.updatedAt { parts.append("updated \(Int(Date().timeIntervalSince(at)))s ago") }
         if let e = p.lastError { parts.append(e) }
         return parts.joined(separator: " · ")
